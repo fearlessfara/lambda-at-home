@@ -1,0 +1,14 @@
+{
+  "id": "8e021574-7cea-4e61-a2e3-e1d32a7feffc",
+  "name": "test-function-8e021574-7cea-4e61-a2e3-e1d32a7feffc",
+  "description": "Test function with different config",
+  "runtime": "nodejs",
+  "handler": "index.handler",
+  "status": "Pending",
+  "docker_image": null,
+  "memory_size": 256,
+  "cpu_limit": 1.0,
+  "timeout": 30,
+  "environment": null,
+  "created_at": "2025-09-02T22:38:48.082250Z"
+}

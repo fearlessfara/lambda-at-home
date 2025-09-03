@@ -1,0 +1,10 @@
+/Users/christiangennarofaraone/express-functions/ric-server/target/x86_64-unknown-linux-musl/release/deps/log-3b5b65e870de7957.d: /Users/christiangennarofaraone/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.27/src/lib.rs /Users/christiangennarofaraone/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.27/src/macros.rs /Users/christiangennarofaraone/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.27/src/serde.rs /Users/christiangennarofaraone/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.27/src/__private_api.rs
+
+/Users/christiangennarofaraone/express-functions/ric-server/target/x86_64-unknown-linux-musl/release/deps/liblog-3b5b65e870de7957.rlib: /Users/christiangennarofaraone/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.27/src/lib.rs /Users/christiangennarofaraone/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.27/src/macros.rs /Users/christiangennarofaraone/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.27/src/serde.rs /Users/christiangennarofaraone/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.27/src/__private_api.rs
+
+/Users/christiangennarofaraone/express-functions/ric-server/target/x86_64-unknown-linux-musl/release/deps/liblog-3b5b65e870de7957.rmeta: /Users/christiangennarofaraone/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.27/src/lib.rs /Users/christiangennarofaraone/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.27/src/macros.rs /Users/christiangennarofaraone/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.27/src/serde.rs /Users/christiangennarofaraone/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.27/src/__private_api.rs
+
+/Users/christiangennarofaraone/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.27/src/lib.rs:
+/Users/christiangennarofaraone/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.27/src/macros.rs:
+/Users/christiangennarofaraone/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.27/src/serde.rs:
+/Users/christiangennarofaraone/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.27/src/__private_api.rs:

@@ -1,0 +1,14 @@
+{
+  "id": "f6f5a97d-b9be-451d-9932-9bb869e5a441",
+  "name": "test-function-f6f5a97d-b9be-451d-9932-9bb869e5a441",
+  "description": "Test function for unit testing",
+  "runtime": "nodejs",
+  "handler": "index.handler",
+  "status": "Pending",
+  "docker_image": null,
+  "memory_size": 128,
+  "cpu_limit": 0.5,
+  "timeout": 30,
+  "environment": null,
+  "created_at": "2025-09-02T22:39:06.248081Z"
+}

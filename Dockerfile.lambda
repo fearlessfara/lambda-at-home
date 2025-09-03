@@ -1,0 +1,32 @@
+# Use Node.js 22 runtime (as per user preference)
+FROM node:22-alpine
+
+# Set working directory
+WORKDIR /var/task
+
+# Copy function code
+COPY . .
+
+# Install dependencies if package.json exists
+RUN if [ -f package.json ]; then npm install --production; fi
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV AWS_LAMBDA_RUNTIME_API=http://socat-relay:8080
+ENV HANDLER=index.handler
+
+# Create a non-root user
+RUN addgroup -g 1001 -S lambda && \
+    adduser -S lambda -u 1001
+
+# Change ownership of the working directory
+RUN chown -R lambda:lambda /var/task
+
+# Switch to non-root user
+USER lambda
+
+# Expose port 8080 (RIC port)
+EXPOSE 8080
+
+# Start the Lambda Runtime Interface Client
+CMD ["node", "index.js"]

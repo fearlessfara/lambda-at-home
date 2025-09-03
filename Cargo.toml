@@ -1,0 +1,74 @@
+[package]
+name = "lambda-docker-executor"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "A Lambda-like system that executes JavaScript functions using Docker containers"
+license = "MIT"
+
+[dependencies]
+# Web framework
+axum = "0.7"
+tokio = { version = "1.0", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# Docker integration
+bollard = "0.16"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# HTTP client
+reqwest = { version = "0.11", features = ["json"] }
+
+# Async runtime utilities
+futures = "0.3"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# File system operations
+tokio-util = { version = "0.7", features = ["codec"] }
+tempfile = "3.8"
+tar = "0.4"
+flate2 = "1.0"
+
+# CLI
+clap = { version = "4.4", features = ["derive"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Configuration
+config = "0.14"
+toml = "0.8"
+
+# Logging
+env_logger = "0.10"
+
+# Base64 encoding
+base64 = "0.21"
+
+# ZIP file handling
+zip = "0.6"
+
+# Futures utilities
+futures-util = "0.3"
+
+# Random number generation
+rand = "0.8"
+
+# Hashing for container reuse
+sha2 = "0.10"
+async-trait = "0.1"
+
+[[bin]]
+name = "lambda-runtime-api-server"
+path = "src/bin/lambda-runtime-api-server.rs"
+
+[dev-dependencies]
+tokio-test = "0.4"
+zip = "0.6"
+base64 = "0.21"

@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lambda-runtime-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lambda-runtime-api
+  template:
+    metadata:
+      labels:
+        app: lambda-runtime-api
+    spec:
+      containers:
+      - name: lambda-runtime-api
+        image: your-registry/lambda-runtime-api:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: RUST_LOG
+          value: "info"
+        volumeMounts:
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+      volumes:
+      - name: docker-sock
+        hostPath:
+          path: /var/run/docker.sock
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lambda-runtime-api-service
+spec:
+  selector:
+    app: lambda-runtime-api
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lambda-container
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lambda-container
+  template:
+    metadata:
+      labels:
+        app: lambda-container
+    spec:
+      containers:
+      - name: lambda-container
+        image: lambda-function-ad80c2e0-aedc-4809-a27b-317361ec87e6
+        env:
+        - name: AWS_LAMBDA_RUNTIME_API
+          value: "http://lambda-runtime-api-service:8080"
+        - name: HANDLER
+          value: "index.handler"
+        - name: AWS_LAMBDA_FUNCTION_NAME
+          value: "test-function"
+        - name: AWS_LAMBDA_FUNCTION_MEMORY_SIZE
+          value: "128"
