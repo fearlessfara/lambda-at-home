@@ -1,0 +1,292 @@
+# Lambda@Home
+
+A Docker-backed AWS Lambda clone that runs locally. Lambda@Home provides AWS Lambda-compatible APIs and executes functions using Docker containers as "microVMs".
+
+## Features
+
+- **AWS Lambda Compatible API**: Full compatibility with AWS Lambda API endpoints
+- **Docker-based Execution**: Functions run in isolated Docker containers
+- **Multiple Runtimes**: Support for Node.js 18, Python 3.11, and Rust
+- **Warm Container Pool**: Efficient container reuse for better performance
+- **Idle Management**: Automatic container lifecycle management (soft/hard idle)
+- **Concurrency Control**: Per-function and global concurrency limits
+- **Metrics & Logging**: Prometheus metrics and structured JSON logging
+- **Security**: Non-root containers, read-only filesystems, capability dropping
+
+## Architecture
+
+Lambda@Home consists of several components:
+
+- **User API** (port 9000): AWS Lambda-compatible REST API
+- **Runtime API** (port 9001): In-container runtime interface (RIC)
+- **Control Plane**: Function registry, scheduler, warm pool management
+- **Invoker**: Docker container lifecycle management
+- **Packaging**: ZIP processing and Docker image building
+- **Metrics**: Prometheus metrics and structured logging
+
+## Quick Start
+
+### Prerequisites
+
+- Docker installed and running
+- Rust 1.75+ (with rustup)
+- Make (optional, for convenience commands)
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd lambda@home
+```
+
+2. Setup the development environment:
+```bash
+make setup
+```
+
+3. Build the project:
+```bash
+make build
+```
+
+### Running the Server
+
+Start the Lambda@Home server:
+```bash
+make run
+```
+
+The server will start on:
+- User API: http://localhost:9000
+- Runtime API: http://localhost:9001
+- Health check: http://localhost:9000/healthz
+- Metrics: http://localhost:9000/metrics
+
+### Creating and Invoking Functions
+
+1. Create example ZIP files:
+```bash
+make examples
+```
+
+2. Create a function:
+```bash
+cargo run --bin lambda-cli -- create echo-test nodejs18.x index.handler examples/echo-node.zip
+```
+
+3. Invoke the function:
+```bash
+cargo run --bin lambda-cli -- invoke echo-test
+```
+
+4. List functions:
+```bash
+cargo run --bin lambda-cli -- list
+```
+
+5. Delete the function:
+```bash
+cargo run --bin lambda-cli -- delete echo-test
+```
+
+### Test Complete Flow
+
+Run the complete test flow:
+```bash
+make test-flow
+```
+
+## Configuration
+
+Configuration is managed via `configs/default.toml`:
+
+```toml
+[server]
+bind = "127.0.0.1"
+port_user_api = 9000
+port_runtime_api = 9001
+
+[data]
+dir = "data"
+db_url = "sqlite://data/lhome.db"
+
+[docker]
+host = ""
+
+[defaults]
+memory_mb = 512
+timeout_ms = 3000
+tmp_mb = 512
+
+[idle]
+soft_ms = 45000   # stop container
+hard_ms = 300000  # rm container
+
+[limits]
+max_global_concurrency = 256
+```
+
+## Supported Runtimes
+
+### Node.js 18
+- Runtime: `nodejs18.x`
+- Handler format: `filename.export`
+- Example: `index.handler`
+
+### Python 3.11
+- Runtime: `python3.11`
+- Handler format: `filename.function`
+- Example: `lambda_function.handler`
+
+### Rust
+- Runtime: `rust`
+- Handler format: `binary_name`
+- Example: `lambda`
+
+## API Endpoints
+
+### User API (AWS Lambda Compatible)
+
+- `POST /2015-03-31/functions` - Create function
+- `GET /2015-03-31/functions/{name}` - Get function
+- `DELETE /2015-03-31/functions/{name}` - Delete function
+- `PUT /2015-03-31/functions/{name}/code` - Update function code
+- `PUT /2015-03-31/functions/{name}/configuration` - Update function config
+- `POST /2015-03-31/functions/{name}/versions` - Publish version
+- `GET /2015-03-03-31/functions` - List functions
+- `POST /2015-03-31/functions/{name}/invocations` - Invoke function
+- `GET /healthz` - Health check
+- `GET /metrics` - Prometheus metrics
+
+### Runtime API (For Containers)
+
+- `GET /2018-06-01/runtime/invocation/next` - Get next invocation
+- `POST /2018-06-01/runtime/invocation/{requestId}/response` - Post response
+- `POST /2018-06-01/runtime/invocation/{requestId}/error` - Post error
+- `POST /2018-06-01/runtime/init/error` - Post init error
+
+## Security Features
+
+- **Non-root execution**: Containers run as user 1000:1000
+- **Read-only rootfs**: Container filesystem is read-only
+- **Capability dropping**: All capabilities are dropped
+- **No new privileges**: Containers cannot gain new privileges
+- **Resource limits**: Memory, CPU, and process limits enforced
+- **Tmpfs for /tmp**: Temporary directory with size limits
+- **Network isolation**: Containers run in isolated networks
+
+## Development
+
+### Project Structure
+
+```
+lambda@home/
+├── crates/
+│   ├── api/           # User API (AWS Lambda compatible)
+│   ├── runtime_api/   # Runtime API (for containers)
+│   ├── control/       # Control plane (registry, scheduler)
+│   ├── invoker/       # Docker container management
+│   ├── packaging/     # ZIP processing and image building
+│   ├── models/        # Shared data models
+│   ├── metrics/       # Metrics and logging
+│   └── cli/           # Command-line tools
+├── runtimes/          # Runtime Dockerfiles and bootstrap scripts
+├── examples/          # Example functions
+├── configs/           # Configuration files
+└── data/              # Database and cache (gitignored)
+```
+
+### Running Tests
+
+```bash
+# Unit tests
+make test
+
+# Integration tests (requires Docker)
+make docker-tests
+```
+
+### Code Quality
+
+```bash
+# Format code
+make fmt
+
+# Run clippy
+make clippy
+```
+
+## Monitoring
+
+### Metrics
+
+Prometheus metrics are available at `/metrics`:
+
+- `lambda_invocations_total` - Total invocations
+- `lambda_errors_total` - Total errors
+- `lambda_throttles_total` - Total throttles
+- `lambda_cold_starts_total` - Total cold starts
+- `lambda_duration_ms` - Function execution duration
+- `lambda_init_duration_ms` - Function initialization duration
+
+### Logging
+
+Structured JSON logs with fields:
+- `ts` - Timestamp
+- `level` - Log level
+- `message` - Log message
+- `function` - Function name
+- `version` - Function version
+- `req_id` - Request ID
+- `container_id` - Container ID
+- `duration_ms` - Execution duration
+- `billed_ms` - Billed duration
+- `mem_peak_mb` - Peak memory usage
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Docker not running**: Ensure Docker is installed and running
+2. **Port conflicts**: Check if ports 9000/9001 are available
+3. **Permission issues**: Ensure Docker daemon is accessible
+4. **Build failures**: Check Rust toolchain and dependencies
+
+### Debug Mode
+
+Run with debug logging:
+```bash
+RUST_LOG=debug cargo run --bin lambda-at-home-server
+```
+
+### Container Logs
+
+Check container logs for function execution issues:
+```bash
+docker logs <container_id>
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Run `make test` and `make clippy`
+6. Submit a pull request
+
+## License
+
+MIT License - see LICENSE file for details.
+
+## Roadmap
+
+- [ ] VPC networking support
+- [ ] Provisioned concurrency
+- [ ] Layer support
+- [ ] More runtime languages
+- [ ] WebSocket support
+- [ ] Event source mappings
+- [ ] Dead letter queues
+- [ ] X-Ray tracing integration

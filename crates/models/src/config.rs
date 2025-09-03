@@ -1,0 +1,85 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Config {
+    pub server: ServerConfig,
+    pub data: DataConfig,
+    pub docker: DockerConfig,
+    pub defaults: DefaultsConfig,
+    pub idle: IdleConfig,
+    pub limits: LimitsConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ServerConfig {
+    pub bind: String,
+    pub port_user_api: u16,
+    pub port_runtime_api: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct DataConfig {
+    pub dir: String,
+    pub db_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct DockerConfig {
+    pub host: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct DefaultsConfig {
+    pub memory_mb: u64,
+    pub timeout_ms: u64,
+    pub tmp_mb: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct IdleConfig {
+    pub soft_ms: u64,
+    pub hard_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct LimitsConfig {
+    pub max_global_concurrency: u32,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            server: ServerConfig {
+                bind: "127.0.0.1".to_string(),
+                port_user_api: 9000,
+                port_runtime_api: 9001,
+            },
+            data: DataConfig {
+                dir: "data".to_string(),
+                db_url: "sqlite://data/lhome.db".to_string(),
+            },
+            docker: DockerConfig {
+                host: "".to_string(),
+            },
+            defaults: DefaultsConfig {
+                memory_mb: 512,
+                timeout_ms: 3000,
+                tmp_mb: 512,
+            },
+            idle: IdleConfig {
+                soft_ms: 45000,
+                hard_ms: 300000,
+            },
+            limits: LimitsConfig {
+                max_global_concurrency: 256,
+            },
+        }
+    }
+}

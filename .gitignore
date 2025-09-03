@@ -1,0 +1,29 @@
+# Rust
+/target/
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Lambda@Home specific
+/data/
+*.log
+
+# Environment files
+.env
+.env.local
+
+# Test artifacts
+test-results/
+coverage/
+
+# Temporary files
+*.tmp
+*.temp
