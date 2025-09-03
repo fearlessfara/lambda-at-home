@@ -1,0 +1,14 @@
+---
+description: ZIP ingest → image build pipeline
+globs: ["crates/packaging/**", "runtimes/**"]
+alwaysApply: false
+---
+
+- Accept ZIP (up to configured size); compute SHA256; store in `data/blobs/`.
+- Choose base runtime by `Runtime` (e.g., nodejs18.x, python3.11, rust).
+- Build image:
+  - `Dockerfile` template copies handler to `/var/task` (`LAMBDA_TASK_ROOT`)
+  - Install deps (language-specific)
+  - Set ENTRYPOINT to the runtime shim (RIC client)
+- Tag image: `lambda-home/{function}:{sha256}`
+- Cache by (runtime, sha256, env_hash) to avoid rebuilds.

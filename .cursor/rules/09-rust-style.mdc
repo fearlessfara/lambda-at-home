@@ -1,0 +1,11 @@
+---
+description: Rust style & safety bars
+alwaysApply: true
+---
+
+- Edition 2021; MSRV pinned.
+- `#![deny(warnings)]` in CI, `anyhow` at bin edges only; domain errors via `thiserror`.
+- No `unwrap()` outside tests.
+- API payload structs `#[serde(deny_unknown_fields)]`.
+- Use `axum` + `tower` for HTTP, `bollard` for Docker.
+- Tokio multi-thread runtime; graceful shutdown; signal handling.

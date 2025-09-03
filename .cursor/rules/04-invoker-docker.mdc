@@ -1,0 +1,28 @@
+---
+description: Docker control & isolation policy (using bollard)
+globs: ["crates/invoker/**"]
+alwaysApply: false
+---
+
+- Create container args:
+  - Image = built runtime image for (function, version)
+  - Cmd = runtime shim entrypoint
+  - Env = merged (system + function env + Lambda-reserved)
+  - Limits: `--memory {mem}m`, `--cpus {cpu}`, `--pids-limit 256`, read-only root, tmpfs `/tmp` size cfg
+  - Security: user non-root, `no-new-privileges`, drop caps, seccomp default
+  - Network: dedicated bridge or none; egress toggle per function
+  - Mounts: none by default
+
+- Start/Stop:
+  - Start on demand; if idle for `idle_soft_ms` → `docker stop`; if past `idle_hard_ms` → `docker rm`.
+  - Never reuse container after OOM or init error.
+
+- Warm pool:
+  - Key = (function_id, image_ref, env_hash)
+  - Min/Max pool; pre-warm on CreateFunction/PublishVersion
+
+- Logs:
+  - Attach stdout/stderr; tail snippet (base64) returned on Invoke when `X-Amz-Log-Type: Tail`
+
+- Timeout:
+  - Watchdog: SIGTERM (grace 250ms) → SIGKILL; map to `Unhandled` timeout error

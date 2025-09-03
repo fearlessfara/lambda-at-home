@@ -1,0 +1,35 @@
+---
+description: Lambda@home architecture & invariants (local daemon, Docker-as-microVM)
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# System
+- Runs as a **local daemon** (systemd or bare process), not inside Docker.
+- Uses **Docker** as the execution substrate (start/stop/rm containers ≈ “microVMs”).
+- Two planes:
+  - **Control/User API (AWS Lambda-compatible)** on localhost: CreateFunction, UpdateCode, Invoke, GetFunction, List, Delete, Versions/Aliases, Concurrency.
+  - **Runtime API (RIC)** inside containers: handlers pull work via `/2018-06-01/runtime/*` endpoints.
+
+# Lifecycle (per function)
+- Code upload: ZIP (AWS-compatible). Extract → stage → build runtime image (base = selected runtime Dockerfile) → tag by `function@sha256`.
+- On Invoke:
+  1) If warm container exists (matching function, version, env-hash), hand it a token.
+  2) Else create container with enforced limits; container **pulls** next event via Runtime API.
+- Idle:
+  - **soft idle**: stop container after `idle_soft_ms`.
+  - **hard idle**: `docker rm` after `idle_hard_ms`.
+- Concurrency: token bucket per function; excess → 429/Throttled.
+
+# State
+- Registry (sqlite by default): functions, versions, aliases, settings, code SHA, image ref.
+- Execution log table for metrics (start/end, duration, billed_ms, error_type).
+- Blob store (filesystem by default) for zipped code + built layers.
+
+# Compatibility
+- ZIP structure: handler + deps like Lambda. Language runtimes under `runtimes/<lang>/Dockerfile`.
+- Environment parity: inject `AWS_LAMBDA_*`, `AWS_*`, `LAMBDA_*` and `/tmp` (size-limited).
+- Response semantics & headers like Lambda (FunctionError, Executed-Version, Log tail).
+
+# Non-goals v1
+- VPC networking, provisioned concurrency billing, layers shared across hosts (later).

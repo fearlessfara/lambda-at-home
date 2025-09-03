@@ -1,0 +1,9 @@
+---
+description: Security defaults for local Docker execution
+alwaysApply: true
+---
+
+- Non-root user in containers; drop caps; `no-new-privileges`; read-only FS; tmpfs `/tmp`.
+- Limit egress by default (per-function toggle).
+- Image allowlist (runtime bases only); verify digests; `pull-always` on build.
+- Never mount host paths into function containers.

@@ -1,0 +1,21 @@
+---
+description: Configuration & env for the local daemon
+alwaysApply: true
+---
+
+Config (figment/env → TOML):
+- server.bind = "127.0.0.1"
+- server.port_user_api = 9000
+- server.port_runtime_api = 9001
+- data.dir = "./data"
+- db.url = "sqlite://data/lhome.db"
+- docker.host = default
+- defaults.memory_mb = 512
+- defaults.timeout_ms = 3000
+- defaults.tmp_mb = 512
+- idle.soft_ms = 45000
+- idle.hard_ms = 300000
+- concurrency.max_global = 256
+
+Reserved env keys injected:
+- `AWS_REGION`, `AWS_DEFAULT_REGION`, `AWS_LAMBDA_*`, `LAMBDA_*`, `TZ=UTC`

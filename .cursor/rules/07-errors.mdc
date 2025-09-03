@@ -1,0 +1,15 @@
+---
+description: Error taxonomy + HTTP mapping (Lambda parity)
+alwaysApply: true
+---
+
+Types:
+- InitError, BadRequest, Throttled, Timeout, OOMKilled, Unhandled, Handled
+
+HTTP:
+- Invoke (sync): always 200 with payload; errors signaled by `X-Amz-Function-Error: Handled|Unhandled`
+- Throttled: 429 on user API calls that cannot accept more invocations
+- Bad input: 400; Not found: 404; Internal: 500 (control plane)
+
+Error JSON shape:
+{ "errorMessage": "...", "errorType": "Timeout|InitError|Unhandled|...", "stackTrace": ["..."] }

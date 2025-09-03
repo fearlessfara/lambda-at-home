@@ -1,0 +1,25 @@
+---
+description: Standard repo/workspace layout for lambda@home
+alwaysApply: true
+---
+
+# Workspace
+project/
+  Cargo.toml (workspace)
+  rust-toolchain.toml
+  configs/default.toml
+  runtimes/
+    nodejs18/Dockerfile
+    python311/Dockerfile
+    rust/Dockerfile
+  crates/
+    api/            # axum server for User API
+    runtime_api/    # in-daemon service that containers call (RIC emulation via host port)
+    control/        # orchestrator: registry, scheduler, warm pool, timeouts
+    invoker/        # Docker control (create/start/stop/rm, stream logs) via bollard
+    packaging/      # ZIP ingest, build image, layer cache
+    models/         # shared types (serde)
+    metrics/        # tracing + prometheus
+    cli/            # admin ops (build, list, purge)
+  data/             # sqlite db, blobs, image cache (configurable)
+  tools/            # scripts

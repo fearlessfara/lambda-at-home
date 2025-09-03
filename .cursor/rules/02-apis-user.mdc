@@ -1,0 +1,24 @@
+---
+description: AWS Lambda-compatible User API (HTTP) contract
+alwaysApply: true
+---
+
+Base: `/2015-03-31/`
+
+- **CreateFunction** `POST /functions`
+  - Body: { FunctionName, Runtime, Role?, Handler, Code: { ZipFile(base64) }, Description?, Timeout, MemorySize, Environment, Publish? }
+  - Returns: function config + Version if publish=true
+
+- **GetFunction** `GET /functions/{name}`
+- **ListFunctions** `GET /functions`
+- **DeleteFunction** `DELETE /functions/{name}`
+- **UpdateFunctionCode** `PUT /functions/{name}/code` (ZipFile)
+- **UpdateFunctionConfiguration** `PUT /functions/{name}/configuration`
+- **PublishVersion** `POST /functions/{name}/versions`
+- **Aliases** `/functions/{name}/aliases` CRUD
+- **Concurrency** `/functions/{name}/concurrency` PUT { ReservedConcurrentExecutions }
+
+- **Invoke** `POST /functions/{name}/invocations`
+  - Headers: `X-Amz-Invocation-Type: RequestResponse|Event|DryRun`, `X-Amz-Log-Type: Tail`
+  - Body: opaque JSON/bytes (UTF-8); binary via base64
+  - Response (sync): 200 with payload; on error: 200 + `X-Amz-Function-Error` + error JSON (Lambda parity)

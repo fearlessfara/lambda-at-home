@@ -1,0 +1,10 @@
+---
+description: Observability (tracing + metrics)
+alwaysApply: true
+---
+
+- `tracing` JSON logs: ts, level, msg, function, version, req_id, container_id, duration_ms, billed_ms, mem_peak_mb
+- Prometheus:
+  - counters: invocations_total{function}, errors_total{function,type}, cold_starts_total{function}
+  - histograms: duration_ms{function}, init_duration_ms{function}
+- `/metrics` on user API port + health `/healthz`

@@ -1,0 +1,24 @@
+---
+description: In-container Runtime API (RIC) the handler talks to
+globs: ["crates/runtime_api/**", "runtimes/**"]
+alwaysApply: false
+---
+
+Base (inside container): `http://${AWS_LAMBDA_RUNTIME_API}` (we map to host:port)
+
+Endpoints:
+- `GET /2018-06-01/runtime/invocation/next`
+  -> { event, context: { awsRequestId, deadlineMs, invokedFunctionArn, traceId, clientContext, cognitoIdentity } }
+- `POST /2018-06-01/runtime/invocation/{awsRequestId}/response`  body = result JSON
+- `POST /2018-06-01/runtime/invocation/{awsRequestId}/error`     body = { errorMessage, errorType, stackTrace? }
+- `POST /2018-06-01/runtime/init/error` for init failures
+
+Required env inside container:
+- `AWS_LAMBDA_RUNTIME_API` = `host.docker.internal:9001` (or bridged host IP)
+- `AWS_LAMBDA_FUNCTION_NAME`, `AWS_LAMBDA_FUNCTION_VERSION`
+- `LAMBDA_TASK_ROOT`, `LAMBDA_RUNTIME_DIR`, `LAMBDA_EVENT_PATH`, `LAMBDA_OUTPUT_PATH` (we provide)
+- `/tmp` writable, size-limited
+
+Behavior:
+- Container starts the runtime shim which calls `/next`, then responds or errors; loop until container is stopped.
+- Idle timer runs in daemon; not in container.
