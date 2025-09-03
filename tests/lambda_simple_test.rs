@@ -1,9 +1,9 @@
-use lambda_docker_executor::{
-    config::Config,
-    docker::DockerManager,
-    lambda_runtime_api::LambdaRuntimeService,
-    models::{Function, FunctionStatus},
-    storage::FunctionStorage,
+use lambda_at_home::{
+    core::config::Config,
+    docker::docker::DockerManager,
+    api::lambda_runtime_api::LambdaRuntimeService,
+    core::models::{Function, FunctionStatus},
+    core::storage::FunctionStorage,
 };
 use serde_json::json;
 use std::collections::HashMap;

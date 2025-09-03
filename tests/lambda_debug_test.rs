@@ -1,9 +1,9 @@
-use lambda_docker_executor::{
-    config::Config,
-    container_lifecycle::ContainerLifecycleManager,
-    docker::DockerManager,
-    models::{Function, FunctionStatus},
-    storage::FunctionStorage,
+use lambda_at_home::{
+    core::config::Config,
+    docker::container_lifecycle::ContainerLifecycleManager,
+    docker::docker::docker::DockerManager,
+    core::models::{Function, FunctionStatus},
+    core::storage::FunctionStorage,
 };
 use std::sync::Arc;
 use tracing::{info, warn};

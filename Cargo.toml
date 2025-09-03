@@ -1,9 +1,9 @@
 [package]
-name = "lambda-docker-executor"
+name = "lambda-at-home"
 version = "0.1.0"
 edition = "2021"
 authors = ["Your Name <your.email@example.com>"]
-description = "A Lambda-like system that executes JavaScript functions using Docker containers"
+description = "Lambda@Home - A Lambda-like system that executes functions using Docker containers"
 license = "MIT"
 
 [dependencies]
@@ -65,8 +65,8 @@ sha2 = "0.10"
 async-trait = "0.1"
 
 [[bin]]
-name = "lambda-runtime-api-server"
-path = "src/bin/lambda-runtime-api-server.rs"
+name = "lambda-at-home-server"
+path = "src/bin/lambda-at-home-server.rs"
 
 [dev-dependencies]
 tokio-test = "0.4"

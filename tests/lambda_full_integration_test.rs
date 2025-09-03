@@ -1,11 +1,11 @@
-use lambda_docker_executor::{
-    config::Config,
-    container_lifecycle::ContainerLifecycleManager,
-    docker::DockerManager,
-    lambda_executor::LambdaExecutor,
-    lambda_runtime_api::LambdaRuntimeService,
-    models::{Function, FunctionStatus, RICInvokeRequest},
-    storage::FunctionStorage,
+use lambda_at_home::{
+    core::config::Config,
+    docker::container_lifecycle::ContainerLifecycleManager,
+    docker::docker::DockerManager,
+    api::lambda_executor::LambdaExecutor,
+    api::lambda_runtime_api::LambdaRuntimeService,
+    core::models::{Function, FunctionStatus, RICInvokeRequest},
+    core::storage::FunctionStorage,
 };
 use serde_json::json;
 use std::sync::Arc;

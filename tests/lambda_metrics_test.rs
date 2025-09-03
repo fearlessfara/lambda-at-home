@@ -1,9 +1,9 @@
-use lambda_docker_executor::{
-    container_lifecycle::ContainerLifecycleManager,
-    docker::DockerManager,
-    function_storage::FunctionStorage,
-    lambda_runtime_api::LambdaRuntimeService,
-    config::Config,
+use lambda_at_home::{
+    docker::container_lifecycle::ContainerLifecycleManager,
+    docker::docker::DockerManager,
+    function_core::storage::FunctionStorage,
+    api::lambda_runtime_api::LambdaRuntimeService,
+    core::config::Config,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};

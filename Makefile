@@ -8,13 +8,13 @@ build-runtimes: javascript-runtime python-runtime
 # Build JavaScript runtime
 javascript-runtime:
 	@echo "Building JavaScript runtime image..."
-	docker build -t javascript-runtime -f runtimes/nodejs-ric/Dockerfile .
+	docker build -t javascript-runtime -f runtimes/nodejs/Dockerfile .
 	@echo "JavaScript runtime image built successfully"
 
 # Build Python runtime
 python-runtime:
 	@echo "Building Python runtime image..."
-	docker build -t python-runtime -f runtimes/python-ric/Dockerfile .
+	docker build -t python-runtime -f runtimes/python/Dockerfile .
 	@echo "Python runtime image built successfully"
 
 # Clean runtime images
