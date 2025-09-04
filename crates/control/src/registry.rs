@@ -15,7 +15,7 @@ use crate::warm_pool::WarmPool;
 use crate::concurrency::ConcurrencyManager;
 
 use crate::work_item::WorkItem;
-use crate::queues::FnKey;
+// No need for FnKey import - using function names directly
 use std::sync::Arc;
 use tracing::{info, error, instrument};
 
@@ -100,7 +100,7 @@ impl ControlPlane {
             handler: request.handler,
             code_sha256,
             description: request.description,
-            timeout: request.timeout.unwrap_or(3000),
+            timeout: request.timeout.unwrap_or(3), // seconds, not milliseconds
             memory_size: request.memory_size.unwrap_or(512),
             environment: request.environment.unwrap_or_default(),
             last_modified: now,
@@ -567,13 +567,46 @@ impl ControlPlane {
         // 5) Build WorkItem
         let work_item = WorkItem::from_invoke_request(req_id.clone(), function.clone(), request.clone());
         
-        // 6) Enqueue: scheduler.enqueue(work_item).await
+        // 6) Ensure at least one warm container exists for this function
+        // Important: do NOT consume availability here. Just check count to avoid
+        // toggling a container to unavailable inadvertently.
+        let function_name = &work_item.function.function_name;
+        if self.warm_pool.container_count(function_name).await == 0 {
+            info!("No container present, creating new container for function: {}", function.function_name);
+            
+            // Build image reference
+            let image_ref = format!("lambda-home/{}:{}", function.function_name, function.code_sha256);
+            
+            // Build Docker image first
+            let mut packaging_service = lambda_packaging::PackagingService::new(self.config.clone());
+            packaging_service.build_image(&function, &image_ref).await?;
+            
+            // Create container
+            let env_vars = function.environment.clone();
+            let container_id = self.invoker.create_container(&function, &image_ref, env_vars).await?;
+            self.invoker.start_container(&container_id).await?;
+            
+            // Add to warm pool
+            let warm_container = crate::warm_pool::WarmContainer {
+                container_id: container_id.clone(),
+                function_id: function.function_id,
+                image_ref: image_ref.clone(),
+                created_at: std::time::Instant::now(),
+                last_used: std::time::Instant::now(),
+                is_available: true, // Make it discoverable immediately
+            };
+            self.warm_pool.add_warm_container(function_name, warm_container).await;
+            
+            info!("Created and started new container: {} for function: {}", container_id, function.function_name);
+        }
+        
+        // 7) Enqueue: scheduler.enqueue(work_item).await
         self.scheduler.enqueue(work_item).await.map_err(|e| LambdaError::InternalError { 
             reason: format!("Failed to enqueue work item: {}", e) 
         })?;
         
-        // 7) Wait for result with buffer: timeout_ms + 500ms
-        let total = tokio::time::Duration::from_millis((function.timeout * 1000) as u64 + 500);
+        // 8) Wait for result with buffer: 10 seconds for container startup and execution
+        let total = tokio::time::Duration::from_secs(10);
         match tokio::time::timeout(total, rx).await {
             Ok(Ok(result)) => {
                 // Success: build Lambda response
@@ -684,16 +717,8 @@ impl ControlPlane {
         
         info!("Container polling for next invocation for function: {} runtime: {}", function_name, runtime);
         
-        // 1) Identify the container routing key from query/headers/env
-        let key = FnKey {
-            function_name: function_name.to_string(),
-            runtime: runtime.to_string(),
-            version: version.unwrap_or("LATEST").to_string(),
-            env_hash: env_hash.unwrap_or("default").to_string(),
-        };
-        
-        // 2) Pop or wait: queues.pop_or_wait(&key).await (lost-wakeup safe)
-        let work_item = self.scheduler.queues().pop_or_wait(&key).await?;
+        // 1) Pop or wait: queues.pop_or_wait(function_name).await (lost-wakeup safe)
+        let work_item = self.scheduler.queues().pop_or_wait(function_name).await?;
         
         info!("Found work item: {} for function: {}", work_item.request_id, work_item.function.function_name);
         

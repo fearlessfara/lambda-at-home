@@ -110,7 +110,8 @@ class LambdaRuntimeInterface {
 
     async pollForInvocation() {
         try {
-            const url = `${this.lambdaRuntimeEndpoint}/runtime/invocation/next`;
+            const functionName = process.env.AWS_LAMBDA_FUNCTION_NAME || 'unknown';
+            const url = `${this.lambdaRuntimeEndpoint}/runtime/invocation/next?fn=${functionName}`;
             const headers = {
                 'lambda-runtime-aws-request-id': this.containerId
             };

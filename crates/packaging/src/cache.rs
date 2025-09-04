@@ -31,13 +31,15 @@ impl PackagingCache {
 
     #[instrument(skip(self))]
     pub fn get_cached_image(&self, function: &Function, zip_sha256: &str) -> Option<String> {
-        let cache_key = format!("{}:{}", function.function_id, zip_sha256);
+        // Include runtime in cache key since different runtimes have different bootstrap scripts
+        let cache_key = format!("{}:{}:{}", function.function_id, function.runtime, zip_sha256);
         self.image_cache.get(&cache_key).cloned()
     }
 
     #[instrument(skip(self))]
     pub fn cache_image(&mut self, function: &Function, zip_sha256: &str, image_tag: String) {
-        let cache_key = format!("{}:{}", function.function_id, zip_sha256);
+        // Include runtime in cache key since different runtimes have different bootstrap scripts
+        let cache_key = format!("{}:{}:{}", function.function_id, function.runtime, zip_sha256);
         self.image_cache.insert(cache_key, image_tag);
         info!("Cached image for function: {} with SHA256: {}", function.function_name, zip_sha256);
     }

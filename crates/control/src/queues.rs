@@ -6,60 +6,9 @@ use tokio::sync::Notify;
 use lambda_models::LambdaError;
 use crate::work_item::WorkItem;
 use tracing::info;
-use sha2::{Sha256, Digest};
-use serde_json::Value;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FnKey {
-    pub function_name: String,
-    pub runtime: String,
-    pub version: String,
-    pub env_hash: String,
-}
 
-impl FnKey {
-    pub fn from_work_item(work_item: &WorkItem) -> Self {
-        // Build a stable representation of the environment by recursively sorting object keys
-        fn canonicalize(v: &Value) -> Value {
-            match v {
-                Value::Object(map) => {
-                    let mut keys: Vec<&String> = map.keys().collect();
-                    keys.sort();
-                    let mut obj = serde_json::Map::with_capacity(keys.len());
-                    for k in keys {
-                        obj.insert(k.clone(), canonicalize(&map[k]));
-                    }
-                    Value::Object(obj)
-                }
-                Value::Array(arr) => {
-                    // Arrays remain in the given order
-                    Value::Array(arr.iter().map(canonicalize).collect())
-                }
-                _ => v.clone(),
-            }
-        }
-
-        let env_value = serde_json::to_value(&work_item.function.environment).unwrap_or(Value::Null);
-        let stable_env = canonicalize(&env_value);
-        let stable_bytes = serde_json::to_vec(&stable_env).unwrap_or_default();
-
-        let mut hasher = Sha256::new();
-        hasher.update(&stable_bytes);
-        let env_hash = format!("{:x}", hasher.finalize());
-
-        Self {
-            function_name: work_item.function.function_name.clone(),
-            runtime: work_item.function.runtime.clone(),
-            // Prefer explicit version from the work item if present; otherwise use "LATEST"
-            version: work_item
-                .function
-                .version
-                .clone()
-                .unwrap_or_else(|| "LATEST".to_string()),
-            env_hash,
-        }
-    }
-}
+// No need for FnKey wrapper - just use function name directly
 
 #[derive(Debug)]
 struct PerFn {
@@ -78,7 +27,7 @@ impl PerFn {
 
 #[derive(Clone)]
 pub struct Queues {
-    inner: Arc<DashMap<FnKey, PerFn>>,
+    inner: Arc<DashMap<String, PerFn>>,
 }
 
 impl Queues {
@@ -89,15 +38,15 @@ impl Queues {
     }
     
     pub fn push(&self, work_item: WorkItem) -> Result<(), LambdaError> {
-        let key = FnKey::from_work_item(&work_item);
+        let function_name = work_item.function.function_name.clone();
         info!(
-            "Pushing work item {} to queue for function: {} runtime: {} version: {} env_hash: {}",
-            work_item.request_id, key.function_name, key.runtime, key.version, key.env_hash
+            "Pushing work item {} to queue for function: {}",
+            work_item.request_id, function_name
         );
 
         // Insert/enqueue under the entry guard, but clone Notify and drop guard before awaiting/notify
         let notify = {
-            let mut per_fn = self.inner.entry(key.clone()).or_insert_with(PerFn::new);
+            let mut per_fn = self.inner.entry(function_name.clone()).or_insert_with(PerFn::new);
             per_fn.queue.push_back(work_item);
             per_fn.notify.clone()
         };
@@ -105,21 +54,29 @@ impl Queues {
         // Notify without holding the map guard to avoid lock contention
         notify.notify_one();
 
-        info!("Notified waiting containers for function: {}", key.function_name);
+        info!("Notified waiting containers for function: {}", function_name);
         Ok(())
     }
     
-    pub async fn pop_or_wait(&self, key: &FnKey) -> Result<WorkItem, LambdaError> {
+    pub fn get_available_work(&self, function_name: &str) -> Vec<WorkItem> {
+        if let Some(entry) = self.inner.get(function_name) {
+            entry.queue.iter().cloned().collect()
+        } else {
+            Vec::new()
+        }
+    }
+    
+    pub async fn pop_or_wait(&self, function_name: &str) -> Result<WorkItem, LambdaError> {
         info!(
-            "Container requesting work for function: {} runtime: {} version: {} env_hash: {}",
-            key.function_name, key.runtime, key.version, key.env_hash
+            "Container requesting work for function: {}",
+            function_name
         );
 
         loop {
             // Fast path: try to dequeue if the per-fn queue exists and has items
-            if let Some(mut entry) = self.inner.get_mut(key) {
+            if let Some(mut entry) = self.inner.get_mut(function_name) {
                 if let Some(work_item) = entry.queue.pop_front() {
-                    info!("Dequeued work item: {} for function: {}", work_item.request_id, key.function_name);
+                    info!("Dequeued work item: {} for function: {}", work_item.request_id, function_name);
                     return Ok(work_item);
                 }
 
@@ -131,9 +88,9 @@ impl Queues {
                 let notified = notify.notified();
 
                 // Re-check after listener registration; if an item arrived in the gap, consume it
-                if let Some(mut entry2) = self.inner.get_mut(key) {
+                if let Some(mut entry2) = self.inner.get_mut(function_name) {
                     if let Some(work_item) = entry2.queue.pop_front() {
-                        info!("Dequeued work item after re-check: {} for function: {}", work_item.request_id, key.function_name);
+                        info!("Dequeued work item after re-check: {} for function: {}", work_item.request_id, function_name);
                         return Ok(work_item);
                     }
                 }
@@ -146,18 +103,26 @@ impl Queues {
 
             // No queue yet: create an empty one and wait for first push
             let notify = {
-                let entry = self.inner.entry(key.clone()).or_insert_with(PerFn::new);
+                let entry = self.inner.entry(function_name.to_string()).or_insert_with(PerFn::new);
                 entry.notify.clone()
             };
-
+            // Register listener first
             let notified = notify.notified();
-            // Nothing to re-check yet (queue was empty/new); wait for first item then loop
+            // Re-check in case a push landed between creating/reading notify and registering
+            if let Some(mut entry2) = self.inner.get_mut(function_name) {
+                if let Some(work_item) = entry2.queue.pop_front() {
+                    info!("Dequeued work item after re-check (new-queue path): {} for function: {}",
+                          work_item.request_id, function_name);
+                    return Ok(work_item);
+                }
+            }
+            // Actually wait
             notified.await;
         }
     }
     
-    pub fn queue_size(&self, key: &FnKey) -> usize {
-        self.inner.get(key)
+    pub fn queue_size(&self, function_name: &str) -> usize {
+        self.inner.get(function_name)
             .map(|per_fn| per_fn.queue.len())
             .unwrap_or(0)
     }
@@ -166,5 +131,13 @@ impl Queues {
         self.inner.iter()
             .map(|entry| entry.queue.len())
             .sum()
+    }
+    
+    pub fn pop_work_item(&self, function_name: &str) -> Option<WorkItem> {
+        if let Some(mut entry) = self.inner.get_mut(function_name) {
+            entry.queue.pop_front()
+        } else {
+            None
+        }
     }
 }

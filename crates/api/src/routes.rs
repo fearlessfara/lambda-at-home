@@ -39,3 +39,7 @@ pub fn create_router() -> Router<AppState> {
         .route("/healthz", get(health_check))
         .route("/metrics", get(metrics))
 }
+
+pub fn build_router(state: AppState) -> Router {
+    create_router().with_state(state)
+}

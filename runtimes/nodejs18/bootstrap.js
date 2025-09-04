@@ -4,8 +4,22 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-// Runtime API configuration
-const RUNTIME_API = process.env.AWS_LAMBDA_RUNTIME_API || 'host.docker.internal:9001';
+// Runtime API configuration (supports values with or without scheme)
+const RAW_RUNTIME_API = process.env.AWS_LAMBDA_RUNTIME_API || 'host.docker.internal:9001';
+function parseRuntimeApiHostPort(raw) {
+  try {
+    // Ensure URL has a scheme for URL parsing
+    const url = raw.includes('://') ? new URL(raw) : new URL(`http://${raw}`);
+    const hostname = url.hostname;
+    const port = url.port ? parseInt(url.port, 10) : (url.protocol === 'https:' ? 443 : 80);
+    return { hostname, port };
+  } catch (e) {
+    // Fallback to naïve split host:port
+    const [host, p] = raw.split(':');
+    return { hostname: host, port: p ? parseInt(p, 10) : 80 };
+  }
+}
+const RUNTIME_API = parseRuntimeApiHostPort(RAW_RUNTIME_API);
 const FUNCTION_NAME = process.env.AWS_LAMBDA_FUNCTION_NAME;
 const FUNCTION_VERSION = process.env.AWS_LAMBDA_FUNCTION_VERSION || '1';
 const HANDLER = process.env.AWS_LAMBDA_FUNCTION_HANDLER || 'index.handler';
@@ -42,8 +56,8 @@ try {
 function makeRequest(method, path, data = null) {
     return new Promise((resolve, reject) => {
         const options = {
-            hostname: RUNTIME_API.split(':')[0],
-            port: RUNTIME_API.split(':')[1] || 80,
+            hostname: RUNTIME_API.hostname,
+            port: RUNTIME_API.port,
             path: path,
             method: method,
             headers: {
@@ -89,11 +103,20 @@ function makeRequest(method, path, data = null) {
 async function runtimeLoop() {
     console.log('Starting runtime loop...');
     
+    // Build query parameters for runtime API (simplified to just function name)
+    const queryParams = new URLSearchParams({
+        fn: FUNCTION_NAME
+    });
+    
     while (true) {
         try {
-            // Poll for next invocation
-            console.log('Polling for next invocation...');
-            const response = await makeRequest('GET', '/2018-06-01/runtime/invocation/next');
+            // Long-lived GET: this call blocks until work is available
+            const url = `/2018-06-01/runtime/invocation/next?${queryParams.toString()}`;
+            console.log('Waiting for next invocation at', url);
+            const response = await makeRequest('GET', url);
+            
+            console.log('Response status:', response.statusCode);
+            // Note: body may be large; avoid logging full payload in production
             
             if (response.statusCode !== 200) {
                 console.error('Failed to get next invocation:', response.statusCode, response.body);
@@ -101,24 +124,19 @@ async function runtimeLoop() {
                 continue;
             }
 
-            const awsRequestId = response.headers['lambda-runtime-aws-request-id'];
-            const deadline = response.headers['lambda-runtime-deadline-ms'];
-            const invokedFunctionArn = response.headers['lambda-runtime-invoked-function-arn'];
-            
-            console.log('Got invocation:', awsRequestId);
-            
-            let payload;
+            let invocationData;
             try {
-                payload = JSON.parse(response.body);
+                invocationData = JSON.parse(response.body);
             } catch (error) {
-                console.error('Failed to parse payload:', error);
-                await makeRequest('POST', `/2018-06-01/runtime/invocation/${awsRequestId}/error`, 
-                    JSON.stringify({
-                        errorMessage: 'Invalid JSON payload',
-                        errorType: 'InvalidRequestException'
-                    }));
+                console.error('Failed to parse invocation data:', error);
                 continue;
             }
+            
+            const awsRequestId = invocationData.requestId;
+            const deadline = invocationData.deadlineMs;
+            const payload = invocationData.event;
+            
+            console.log('Got invocation:', awsRequestId);
 
             // Execute the user function
             let result;

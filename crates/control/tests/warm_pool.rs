@@ -9,16 +9,12 @@ async fn warm_pool_basic_operations() {
     
     let key = FnKey {
         function_name: "test-fn".to_string(),
-        runtime: "nodejs18.x".to_string(),
-        version: "LATEST".to_string(),
-        env_hash: "test-hash".to_string(),
     };
     
     let container = WarmContainer {
         container_id: "test-container".to_string(),
         function_id: Uuid::new_v4(),
         image_ref: "test-image".to_string(),
-        env_hash: "test-hash".to_string(),
         created_at: Instant::now(),
         last_used: Instant::now(),
         is_available: true,

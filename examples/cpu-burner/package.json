@@ -1,0 +1,17 @@
+{
+    "name": "cpu-burner-lambda",
+    "version": "1.0.0",
+    "description": "CPU-heavy Lambda function for stress testing Lambda@Home runtime",
+    "main": "index.js",
+    "type": "commonjs",
+    "scripts": {
+      "test": "node index.js"
+    },
+    "keywords": [
+      "lambda",
+      "stress",
+      "cpu",
+      "benchmark"
+    ],
+    "license": "MIT"
+  }

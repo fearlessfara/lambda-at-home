@@ -19,7 +19,7 @@ impl From<Function> for FunctionMeta {
             runtime: func.runtime,
             version: Some(func.version),
             environment: Some(func.environment),
-            timeout_ms: func.timeout as u32,
+            timeout_ms: (func.timeout * 1000) as u32, // convert seconds to milliseconds
         }
     }
 }

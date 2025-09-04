@@ -1,0 +1,122 @@
+use anyhow::Result;
+use lambda_models::Config;
+use lambda_control::ControlPlane;
+use lambda_metrics::MetricsService;
+use lambda_invoker::Invoker;
+use std::sync::Arc;
+use tokio::signal;
+use tracing::{info, warn};
+use sqlx::SqlitePool;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Initialize tracing
+    tracing_subscriber::fmt()
+        .init();
+
+    info!("Starting Lambda@Home server");
+
+    // Load configuration (use default for now)
+    let config: Config = Config::default();
+
+    info!("Configuration loaded: {:?}", config);
+
+    // Initialize database pool
+    let pool = SqlitePool::connect(&config.data.db_url).await?;
+    info!("Database connected");
+
+    // Initialize metrics service
+    let metrics = Arc::new(MetricsService::new()?);
+    
+    // Initialize invoker
+    let invoker = Arc::new(Invoker::new(config.clone()).await?);
+    
+    // Initialize control plane
+    let control_plane = Arc::new(ControlPlane::new(pool, invoker, config.clone()).await?);
+
+    // Start the control plane (no start method needed for now)
+    let control_handle = {
+        let _control_plane = control_plane.clone();
+        tokio::spawn(async move {
+            // Control plane is ready to handle requests
+            info!("Control plane initialized and ready");
+            // Keep the task alive
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+            }
+        })
+    };
+
+    // Clone config values for the servers
+    let bind_addr = config.server.bind.clone();
+    let user_api_port = config.server.port_user_api;
+    let runtime_api_port = config.server.port_runtime_api;
+
+    // Start user API server
+    let user_api_handle = {
+        let control_plane = control_plane.clone();
+        let metrics = metrics.clone();
+        let bind = bind_addr.clone();
+        tokio::spawn(async move {
+            if let Err(e) = lambda_api::start_server(
+                bind,
+                user_api_port,
+                control_plane,
+                metrics,
+            )
+            .await
+            {
+                warn!("User API server error: {}", e);
+            }
+        })
+    };
+
+    // Start runtime API server
+    let runtime_api_handle = {
+        let control_plane = control_plane.clone();
+        let bind = bind_addr.clone();
+        tokio::spawn(async move {
+            if let Err(e) = lambda_runtime_api::start_server(
+                bind,
+                runtime_api_port,
+                control_plane,
+            )
+            .await
+            {
+                warn!("Runtime API server error: {}", e);
+            }
+        })
+    };
+
+    info!(
+        "Lambda@Home server started successfully. User API: {}:{}, Runtime API: {}:{}",
+        bind_addr,
+        user_api_port,
+        bind_addr,
+        runtime_api_port
+    );
+
+    // Wait for shutdown signal
+    match signal::ctrl_c().await {
+        Ok(()) => {
+            info!("Received shutdown signal");
+        }
+        Err(err) => {
+            warn!("Unable to listen for shutdown signal: {}", err);
+        }
+    }
+
+    // Graceful shutdown
+    info!("Shutting down Lambda@Home server...");
+    
+    // Cancel all tasks
+    control_handle.abort();
+    user_api_handle.abort();
+    runtime_api_handle.abort();
+
+    // Wait a bit for graceful shutdown
+    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+    info!("Lambda@Home server shutdown complete");
+    Ok(())
+}

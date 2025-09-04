@@ -23,7 +23,7 @@ pub async fn create_function(
     
     match state.control.create_function(payload).await {
         Ok(function) => {
-            state.metrics.record_function_created(&function.function_name);
+            state.metrics.record_function_created(&function.function_name).await;
             Ok(Json(function))
         }
         Err(e) => {
@@ -60,7 +60,7 @@ pub async fn delete_function(
     
     match state.control.delete_function(&name).await {
         Ok(_) => {
-            state.metrics.record_function_deleted(&name);
+            state.metrics.record_function_deleted(&name).await;
             Ok(StatusCode::NO_CONTENT)
         }
         Err(e) => {

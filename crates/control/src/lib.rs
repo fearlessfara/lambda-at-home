@@ -75,16 +75,12 @@ mod tests {
         // Create FnKey for the test
         let key = crate::queues::FnKey {
             function_name: function.function_name.clone(),
-            runtime: function.runtime.clone(),
-            version: function.version.clone(),
-            env_hash: env_hash.to_string(),
         };
         
         let container = WarmContainer {
             container_id: "test-container".to_string(),
             function_id: function.function_id,
             image_ref: "test-image".to_string(),
-            env_hash: env_hash.to_string(),
             created_at: Instant::now(),
             last_used: Instant::now(),
             is_available: true,
@@ -154,16 +150,12 @@ mod tests {
         // Create FnKey for the test
         let key = crate::queues::FnKey {
             function_name: function.function_name.clone(),
-            runtime: function.runtime.clone(),
-            version: function.version.clone(),
-            env_hash: "test-env".to_string(),
         };
         
         let container = WarmContainer {
             container_id: "test-container".to_string(),
             function_id: function.function_id,
             image_ref: "test-image".to_string(),
-            env_hash: "test-env".to_string(),
             created_at: Instant::now(),
             last_used: Instant::now() - Duration::from_secs(5), // 5 seconds ago
             is_available: true,

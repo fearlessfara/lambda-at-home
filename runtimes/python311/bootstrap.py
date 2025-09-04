@@ -27,7 +27,7 @@ except Exception as e:
 
 def get_next_invocation():
     """Get the next invocation from the runtime API"""
-    url = f'http://{RUNTIME_API}/2018-06-01/runtime/invocation/next'
+    url = f'http://{RUNTIME_API}/2018-06-01/runtime/invocation/next?fn={FUNCTION_NAME}'
     
     try:
         req = urllib.request.Request(url)
