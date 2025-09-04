@@ -1,0 +1,2 @@
+# No external dependencies required - using standard library only
+# urllib, json, ssl are all part of Python standard library

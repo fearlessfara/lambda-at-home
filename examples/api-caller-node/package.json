@@ -1,0 +1,12 @@
+{
+  "name": "api-caller-node",
+  "version": "1.0.0",
+  "description": "Lambda function that makes HTTP API calls",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "keywords": ["lambda", "api", "http", "requests"],
+  "author": "lambda-at-home",
+  "license": "MIT"
+}

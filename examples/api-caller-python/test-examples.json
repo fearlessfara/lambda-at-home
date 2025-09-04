@@ -1,0 +1,41 @@
+{
+  "simple_get": {
+    "url": "https://httpbin.org/get"
+  },
+  "get_with_headers": {
+    "url": "https://httpbin.org/get",
+    "method": "GET",
+    "headers": {
+      "User-Agent": "lambda-at-home",
+      "Accept": "application/json"
+    }
+  },
+  "post_with_json": {
+    "url": "https://httpbin.org/post",
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "data": {
+      "message": "Hello from Lambda!",
+      "timestamp": "2024-01-01T00:00:00Z"
+    }
+  },
+  "github_api_example": {
+    "url": "https://api.github.com/repos/microsoft/vscode",
+    "method": "GET",
+    "headers": {
+      "Accept": "application/vnd.github.v3+json",
+      "User-Agent": "lambda-at-home"
+    }
+  },
+  "jsonplaceholder_example": {
+    "url": "https://jsonplaceholder.typicode.com/posts/1",
+    "method": "GET"
+  },
+  "http_status_test": {
+    "url": "https://httpstat.us/200",
+    "method": "GET"
+  }
+}
+
