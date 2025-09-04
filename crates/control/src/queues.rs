@@ -155,6 +155,11 @@ impl Queues {
             .map(|entry| entry.queue.len())
             .sum()
     }
+
+    /// Snapshot current per-key queue sizes (for autoscaling decisions)
+    pub fn snapshot_sizes(&self) -> Vec<(FnKey, usize)> {
+        self.inner.iter().map(|entry| (entry.key().clone(), entry.queue.len())).collect()
+    }
     
     pub fn pop_work_item(&self, key: &FnKey) -> Option<WorkItem> {
         if let Some(mut entry) = self.inner.get_mut(key) {

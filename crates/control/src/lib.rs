@@ -6,6 +6,7 @@ pub mod idle_watchdog;
 pub mod pending;
 pub mod work_item;
 pub mod queues;
+pub mod autoscaler;
 
 pub use registry::*;
 pub use scheduler::*;
@@ -15,6 +16,7 @@ pub use idle_watchdog::*;
 pub use pending::*;
 pub use work_item::*;
 pub use queues::*;
+pub use autoscaler::*;
 
 #[cfg(test)]
 mod tests {

@@ -12,6 +12,8 @@ use lambda_models::{
 };
 use crate::scheduler::{Scheduler, run_dispatcher};
 use crate::pending::Pending;
+use crate::autoscaler::Autoscaler;
+use crate::queues::Queues;
 use crate::warm_pool::WarmPool;
 use crate::concurrency::ConcurrencyManager;
 
@@ -45,6 +47,18 @@ impl ControlPlane {
             run_dispatcher(rx, queues).await;
         });
 
+        // Spawn autoscaler loop
+        let control_ref = Arc::new(Self {
+            pool: pool.clone(),
+            scheduler: Arc::new(scheduler.clone()),
+            warm_pool: warm_pool.clone(),
+            concurrency_manager: concurrency_manager.clone(),
+            invoker: invoker.clone(),
+            config: config.clone(),
+        });
+        let autoscaler = Autoscaler::new(control_ref.clone());
+        tokio::spawn(async move { autoscaler.start().await; });
+
         Ok(Self {
             pool,
             scheduler: Arc::new(scheduler),
@@ -60,6 +74,7 @@ impl ControlPlane {
     pub fn pending(&self) -> Pending { self.scheduler.pending() }
     pub fn invoker(&self) -> Arc<lambda_invoker::Invoker> { self.invoker.clone() }
     pub fn config(&self) -> lambda_models::Config { self.config.clone() }
+    pub fn queues(&self) -> Queues { self.scheduler.queues() }
 
     #[instrument(skip(self))]
     pub async fn create_function(&self, request: CreateFunctionRequest) -> Result<Function, LambdaError> {

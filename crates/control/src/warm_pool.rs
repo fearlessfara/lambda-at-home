@@ -235,6 +235,18 @@ impl WarmPool {
         to_stop
     }
 
+    /// Count containers in a specific state for a key
+    pub async fn count_state(&self, key: &FnKey, state: InstanceState) -> usize {
+        let containers = self.containers.lock().await;
+        containers.get(key).map(|list| list.iter().filter(|c| c.state == state).count()).unwrap_or(0)
+    }
+
+    /// List stopped container IDs for a key
+    pub async fn list_stopped(&self, key: &FnKey) -> Vec<String> {
+        let containers = self.containers.lock().await;
+        containers.get(key).map(|list| list.iter().filter(|c| c.state == InstanceState::Stopped).map(|c| c.container_id.clone()).collect()).unwrap_or_default()
+    }
+
     /// Set container state by container_id across all keys.
     pub async fn set_state_by_container_id(&self, container_id: &str, state: InstanceState) -> bool {
         let mut containers = self.containers.lock().await;
