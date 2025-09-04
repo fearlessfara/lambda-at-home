@@ -731,40 +731,7 @@ impl ControlPlane {
     
 
 
-    async fn execute_function_code(&self, function: &Function, request: &InvokeRequest) -> serde_json::Value {
-        // For now, let's create a simple echo function that returns the input
-        // This simulates what the actual function would do
-        match function.runtime.as_str() {
-            "nodejs18.x" => {
-                // Simulate Node.js function execution
-                // In a real implementation, this would execute the actual JavaScript code
-                serde_json::json!({
-                    "ok": true,
-                    "input": request.payload,
-                    "function_name": function.function_name,
-                    "runtime": function.runtime,
-                    "message": "Function executed successfully"
-                })
-            }
-            "python3.11" => {
-                // Simulate Python function execution
-                serde_json::json!({
-                    "ok": true,
-                    "input": request.payload,
-                    "function_name": function.function_name,
-                    "runtime": function.runtime,
-                    "message": "Function executed successfully"
-                })
-            }
-            _ => {
-                serde_json::json!({
-                    "ok": true,
-                    "input": request.payload,
-                    "message": "Function executed successfully"
-                })
-            }
-        }
-    }
+    
 
     #[instrument(skip(self))]
     pub async fn get_next_invocation(&self, function_name: &str, runtime: &str, version: Option<&str>, env_hash: Option<&str>) -> Result<RuntimeInvocation, LambdaError> {

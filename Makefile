@@ -1,4 +1,4 @@
-.PHONY: build test test-unit test-int fmt clippy clean run
+.PHONY: build test test-unit test-int fmt clippy clean run test-autoscaling test-service test-metrics
 
 # Build the project
 build:
@@ -40,6 +40,16 @@ clean:
 run:
 	cargo run --bin lambda-at-home-server
 
+# Scripted smoke tests (require server + Docker)
+test-autoscaling:
+	./scripts/test-autoscaling.sh
+
+test-service:
+	./scripts/test-service.sh
+
+test-metrics:
+	./scripts/test-metrics.sh
+
 # CI targets
 ci: fmt-check clippy test-unit
 
@@ -58,6 +68,9 @@ help:
 	@echo "  clippy     - Run clippy linter"
 	@echo "  clean      - Clean build artifacts"
 	@echo "  run        - Run the server"
+	@echo "  test-autoscaling - Run autoscaling burst + reuse smoke test"
+	@echo "  test-service - Run end-to-end service smoke test"
+	@echo "  test-metrics - Check /metrics endpoint"
 	@echo "  ci         - Run CI checks (format, clippy, unit tests)"
 	@echo "  ci-full    - Run full CI with integration tests"
 	@echo "  help       - Show this help"

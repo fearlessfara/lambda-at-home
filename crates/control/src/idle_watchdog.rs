@@ -11,7 +11,7 @@ use tracing::{error, instrument, info};
 pub struct IdleWatchdog {
     config: Config,
     warm_pool: Arc<WarmPool>,
-    pending: Arc<Pending>,
+    _pending: Arc<Pending>,
     invoker: Arc<Invoker>,
 }
 
@@ -20,7 +20,7 @@ impl IdleWatchdog {
         Self {
             config,
             warm_pool,
-            pending,
+            _pending: pending,
             invoker,
         }
     }

@@ -1,17 +1,18 @@
 # Lambda@Home
 
-A Docker-backed AWS Lambda clone that runs locally. Lambda@Home provides AWS Lambda-compatible APIs and executes functions using Docker containers as "microVMs".
+A Docker‑backed AWS Lambda clone that runs locally. Lambda@Home provides Lambda‑compatible APIs and executes functions in Docker containers with a Lambda‑like lifecycle.
 
 ## Features
 
-- **AWS Lambda Compatible API**: Full compatibility with AWS Lambda API endpoints
-- **Docker-based Execution**: Functions run in isolated Docker containers
-- **Multiple Runtimes**: Support for Node.js 18, Python 3.11, and Rust
-- **Warm Container Pool**: Efficient container reuse for better performance
-- **Idle Management**: Automatic container lifecycle management (soft/hard idle)
-- **Concurrency Control**: Per-function and global concurrency limits
-- **Metrics & Logging**: Prometheus metrics and structured JSON logging
-- **Security**: Non-root containers, read-only filesystems, capability dropping
+- Lambda‑compatible User API and in‑container Runtime API
+- Docker‑based isolation for function execution
+- Runtimes: Node.js 18, Python 3.11, Rust
+- Warm pool + reuse: `WarmIdle → Active → WarmIdle`
+- Idle management: soft stop and hard removal with watchdog
+- Autoscaling: scales to queue depth; restarts stopped instances first
+- Concurrency control: global (and ready for per‑function)
+- Metrics: Prometheus endpoint; structured tracing logs
+- Security: non‑root, read‑only rootfs, capability drop, tmpfs
 
 ## Architecture
 
@@ -34,18 +35,13 @@ Lambda@Home consists of several components:
 
 ### Installation
 
-1. Clone the repository:
+1) Clone the repository
 ```bash
 git clone <repository-url>
 cd lambda@home
 ```
 
-2. Setup the development environment:
-```bash
-make setup
-```
-
-3. Build the project:
+2) Build the project
 ```bash
 make build
 ```
@@ -58,43 +54,28 @@ make run
 ```
 
 The server will start on:
-- User API: http://localhost:9000
-- Runtime API: http://localhost:9001
-- Health check: http://localhost:9000/healthz
-- Metrics: http://localhost:9000/metrics
+- User API: http://127.0.0.1:9000
+- Runtime API: http://127.0.0.1:9001
+- Health: http://127.0.0.1:9000/healthz
+- Metrics: http://127.0.0.1:9000/metrics
 
-### Creating and Invoking Functions
+### Create and invoke a function (curl)
 
-1. Create example ZIP files:
+Package a ZIP with your handler (Node example: `index.js` with `exports.handler`). Then:
+
+Create function
 ```bash
-make examples
+ZIP_B64=$(base64 < test-function.zip | tr -d '\n')
+curl -sS -X POST http://127.0.0.1:9000/2015-03-31/functions \
+  -H 'content-type: application/json' \
+  -d "{\n    \"function_name\": \"echo\",\n    \"runtime\": \"nodejs18.x\",\n    \"handler\": \"index.handler\",\n    \"code\": { \"zip_file\": \"$ZIP_B64\" }\n  }"
 ```
 
-2. Create a function:
+Invoke function
 ```bash
-cargo run --bin lambda-cli -- create echo-test nodejs18.x index.handler examples/echo-node.zip
-```
-
-3. Invoke the function:
-```bash
-cargo run --bin lambda-cli -- invoke echo-test
-```
-
-4. List functions:
-```bash
-cargo run --bin lambda-cli -- list
-```
-
-5. Delete the function:
-```bash
-cargo run --bin lambda-cli -- delete echo-test
-```
-
-### Test Complete Flow
-
-Run the complete test flow:
-```bash
-make test-flow
+curl -sS -X POST http://127.0.0.1:9000/2015-03-31/functions/echo/invocations \
+  -H 'content-type: application/json' \
+  -d '{"ping":1}' | jq
 ```
 
 ## Configuration
@@ -154,7 +135,7 @@ max_global_concurrency = 256
 - `PUT /2015-03-31/functions/{name}/code` - Update function code
 - `PUT /2015-03-31/functions/{name}/configuration` - Update function config
 - `POST /2015-03-31/functions/{name}/versions` - Publish version
-- `GET /2015-03-03-31/functions` - List functions
+- `GET /2015-03-31/functions` - List functions
 - `POST /2015-03-31/functions/{name}/invocations` - Invoke function
 - `GET /healthz` - Health check
 - `GET /metrics` - Prometheus metrics
@@ -194,18 +175,13 @@ lambda@home/
 ├── runtimes/          # Runtime Dockerfiles and bootstrap scripts
 ├── examples/          # Example functions
 ├── configs/           # Configuration files
-└── data/              # Database and cache (gitignored)
+├── scripts/           # Curated local test scripts
+└── data/              # DB and cache (gitignored)
 ```
 
-### Running Tests
+### Running tests
 
-```bash
-# Unit tests
-make test
-
-# Integration tests (requires Docker)
-make docker-tests
-```
+See TESTING.md for details.
 
 ### Code Quality
 

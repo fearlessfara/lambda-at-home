@@ -6,12 +6,12 @@ use crate::zip_handler::ZipInfo;
 use tracing::{info, error, instrument};
 
 pub struct ImageBuilder {
-    docker_host: String,
+    _docker_host: String,
 }
 
 impl ImageBuilder {
     pub fn new(docker_host: String) -> Self {
-        Self { docker_host }
+        Self { _docker_host: docker_host }
     }
 
     #[instrument(skip(self, function, zip_info))]
@@ -87,7 +87,7 @@ impl ImageBuilder {
         }
     }
 
-    fn create_nodejs_dockerfile(&self, function: &Function) -> String {
+    fn create_nodejs_dockerfile(&self, _function: &Function) -> String {
         format!(r#"
 FROM node:18-alpine
 
@@ -132,7 +132,7 @@ USER 1000:1000
 "#)
     }
 
-    fn create_python_dockerfile(&self, function: &Function) -> String {
+    fn create_python_dockerfile(&self, _function: &Function) -> String {
         format!(r#"
 FROM python:3.11-alpine
 
