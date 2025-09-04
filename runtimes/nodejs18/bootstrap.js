@@ -24,6 +24,7 @@ const FUNCTION_NAME = process.env.AWS_LAMBDA_FUNCTION_NAME;
 const FUNCTION_VERSION = process.env.AWS_LAMBDA_FUNCTION_VERSION || '1';
 const HANDLER = process.env.AWS_LAMBDA_FUNCTION_HANDLER || 'index.handler';
 const TASK_ROOT = process.env.LAMBDA_TASK_ROOT || '/var/task';
+const INSTANCE_ID = process.env.LAMBDAH_INSTANCE_ID;
 
 console.log('Lambda Runtime starting...');
 console.log('Function:', FUNCTION_NAME);
@@ -53,7 +54,7 @@ try {
 }
 
 // Runtime API client
-function makeRequest(method, path, data = null) {
+function makeRequest(method, path, data = null, extraHeaders = {}) {
     return new Promise((resolve, reject) => {
         const options = {
             hostname: RUNTIME_API.hostname,
@@ -62,7 +63,8 @@ function makeRequest(method, path, data = null) {
             method: method,
             headers: {
                 'Content-Type': 'application/json',
-            }
+                ...extraHeaders,
+            },
         };
 
         if (data) {
@@ -113,7 +115,7 @@ async function runtimeLoop() {
             // Long-lived GET: this call blocks until work is available
             const url = `/2018-06-01/runtime/invocation/next?${queryParams.toString()}`;
             console.log('Waiting for next invocation at', url);
-            const response = await makeRequest('GET', url);
+            const response = await makeRequest('GET', url, null, INSTANCE_ID ? { 'X-LambdaH-Instance-Id': INSTANCE_ID } : {});
             
             console.log('Response status:', response.statusCode);
             // Note: body may be large; avoid logging full payload in production
@@ -124,17 +126,17 @@ async function runtimeLoop() {
                 continue;
             }
 
-            let invocationData;
+            // Parse AWS-style response: headers carry metadata, body is event JSON
+            const awsRequestId = response.headers['lambda-runtime-aws-request-id'];
+            const deadlineHeader = response.headers['lambda-runtime-deadline-ms'];
+            const deadline = deadlineHeader ? parseInt(deadlineHeader, 10) : undefined;
+            let payload;
             try {
-                invocationData = JSON.parse(response.body);
+                payload = response.body && response.body.length ? JSON.parse(response.body) : undefined;
             } catch (error) {
-                console.error('Failed to parse invocation data:', error);
-                continue;
+                console.error('Failed to parse event JSON:', error);
+                payload = undefined;
             }
-            
-            const awsRequestId = invocationData.requestId;
-            const deadline = invocationData.deadlineMs;
-            const payload = invocationData.event;
             
             console.log('Got invocation:', awsRequestId);
 
@@ -150,13 +152,17 @@ async function runtimeLoop() {
                         errorMessage: error.message,
                         errorType: 'Unhandled',
                         stackTrace: error.stack
-                    }));
+                    }),
+                    { 'X-Amz-Function-Error': 'Unhandled', ...(INSTANCE_ID ? { 'X-LambdaH-Instance-Id': INSTANCE_ID } : {}) }
+                );
                 continue;
             }
 
             // Post the result
             await makeRequest('POST', `/2018-06-01/runtime/invocation/${awsRequestId}/response`, 
-                JSON.stringify(result));
+                JSON.stringify(result),
+                INSTANCE_ID ? { 'X-LambdaH-Instance-Id': INSTANCE_ID } : {}
+            );
             
             console.log('Posted response for:', awsRequestId);
 

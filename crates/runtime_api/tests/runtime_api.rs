@@ -19,7 +19,7 @@ use lambda_runtime_api::state::RtState;
 fn test_router() -> Router {
     let queues = Queues::new();
     let pending = Pending::new();
-    build_router(RtState { queues, pending })
+    build_router(RtState { control: None, queues, pending })
 }
 
 // Build a matching FnKey for the queue (must match your container query)
@@ -78,7 +78,7 @@ async fn healthz_ok() {
 async fn next_blocks_then_returns_when_pushed() {
     let queues = Queues::new();
     let pending = Pending::new();
-    let state = RtState { queues: queues.clone(), pending };
+    let state = RtState { control: None, queues: queues.clone(), pending };
     let app = build_router(state);
 
     // Start /next long-poll in background
@@ -99,21 +99,22 @@ async fn next_blocks_then_returns_when_pushed() {
     queues.push(work_item("req-1")).unwrap();
 
     // The long-poll should now complete
-    let res = timeout(Duration::from_secs(2), fut).await.unwrap().unwrap().into_body();
-    // Read body bytes
-    let bytes = axum::body::to_bytes(res, 1024).await.unwrap();
-    let json: JsonValue = serde_json::from_slice(&bytes).unwrap();
-
-    assert_eq!(json["requestId"], "req-1");
-    assert_eq!(json["event"]["ping"], "pong");
-    assert!(json["deadlineMs"].as_i64().unwrap() > 0);
+    let res = timeout(Duration::from_secs(2), fut).await.unwrap().unwrap();
+    let headers = res.headers();
+    assert_eq!(headers.get("lambda-runtime-aws-request-id").unwrap(), "req-1");
+    let deadline_ms = headers.get("lambda-runtime-deadline-ms").unwrap().to_str().unwrap().parse::<i64>().unwrap();
+    assert!(deadline_ms > 0);
+    // Body is the raw event JSON
+    let bytes = axum::body::to_bytes(res.into_body(), 1024).await.unwrap();
+    let event: JsonValue = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(event["ping"], "pong");
 }
 
 #[tokio::test]
 async fn next_returns_json_200() {
     let queues = Queues::new();
     let pending = Pending::new();
-    let state = RtState { queues: queues.clone(), pending };
+    let state = RtState { control: None, queues: queues.clone(), pending };
     let app = build_router(state);
 
     // Push before calling /next
@@ -130,16 +131,18 @@ async fn next_returns_json_200() {
     let ct = res.headers().get(axum::http::header::CONTENT_TYPE).unwrap().to_str().unwrap();
     assert!(ct.starts_with("application/json"));
 
+    // Headers should include request id and content-type
+    assert_eq!(res.headers().get("lambda-runtime-aws-request-id").unwrap(), "req-2");
     let bytes = axum::body::to_bytes(res.into_body(), 1024).await.unwrap();
-    let json: JsonValue = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(json["requestId"], "req-2");
+    let event: JsonValue = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(event["ping"], "pong");
 }
 
 #[tokio::test]
 async fn runtime_response_delivers_and_returns_202() {
     let queues = Queues::new();
     let pending = Pending::new();
-    let state = RtState { queues, pending: pending.clone() };
+    let state = RtState { control: None, queues, pending: pending.clone() };
     let app = build_router(state);
 
     // Register a waiter (simulate invoke side)
@@ -165,7 +168,7 @@ async fn runtime_response_delivers_and_returns_202() {
 async fn runtime_error_delivers_with_kind_and_returns_202() {
     let queues = Queues::new();
     let pending = Pending::new();
-    let state = RtState { queues, pending: pending.clone() };
+    let state = RtState { control: None, queues, pending: pending.clone() };
     let app = build_router(state);
 
     let req_id = "req-4".to_string();
@@ -190,7 +193,7 @@ async fn runtime_error_delivers_with_kind_and_returns_202() {
 async fn runtime_response_404_if_no_waiter() {
     let queues = Queues::new();
     let pending = Pending::new();
-    let state = RtState { queues, pending };
+    let state = RtState { control: None, queues, pending };
     let app = build_router(state);
     // No pending.register for req-5
 

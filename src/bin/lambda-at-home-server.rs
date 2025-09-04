@@ -7,6 +7,7 @@ use std::sync::Arc;
 use tokio::signal;
 use tracing::{info, warn};
 use sqlx::SqlitePool;
+use lambda_control::IdleWatchdog;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -44,6 +45,20 @@ async fn main() -> Result<()> {
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
             }
+        })
+    };
+
+    // Start idle watchdog
+    let watchdog_handle = {
+        let cp = control_plane.clone();
+        tokio::spawn(async move {
+            let watchdog = IdleWatchdog::new(
+                cp.config(),
+                cp.warm_pool(),
+                Arc::new(cp.pending()),
+                cp.invoker(),
+            );
+            watchdog.start().await;
         })
     };
 
@@ -113,6 +128,17 @@ async fn main() -> Result<()> {
     control_handle.abort();
     user_api_handle.abort();
     runtime_api_handle.abort();
+    watchdog_handle.abort();
+
+    // Best-effort: remove any remaining containers
+    {
+        let inv = control_plane.invoker();
+        let pool = control_plane.warm_pool();
+        let ids = pool.drain_all().await;
+        for id in ids {
+            let _ = inv.remove_container(&id).await;
+        }
+    }
 
     // Wait a bit for graceful shutdown
     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;

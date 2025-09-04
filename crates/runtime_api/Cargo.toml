@@ -39,6 +39,7 @@ tracing-subscriber = { workspace = true }
 # Encoding
 base64 = { workspace = true }
 bytes = { workspace = true }
+sha2 = { workspace = true }
 
 # HTTP client (for demo bin)
 reqwest = { workspace = true }
@@ -54,4 +55,3 @@ serde_json = "1"
 bytes = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
-sha2 = "0.10"

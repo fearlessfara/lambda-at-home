@@ -75,15 +75,19 @@ mod tests {
         // Create FnKey for the test
         let key = crate::queues::FnKey {
             function_name: function.function_name.clone(),
+            runtime: function.runtime.clone(),
+            version: "LATEST".to_string(),
+            env_hash: "".to_string(),
         };
         
         let container = WarmContainer {
             container_id: "test-container".to_string(),
+            instance_id: "inst-1".to_string(),
             function_id: function.function_id,
             image_ref: "test-image".to_string(),
             created_at: Instant::now(),
             last_used: Instant::now(),
-            is_available: true,
+            state: crate::warm_pool::InstanceState::WarmIdle,
         };
         
         pool.add_warm_container(key.clone(), container).await;
@@ -150,15 +154,19 @@ mod tests {
         // Create FnKey for the test
         let key = crate::queues::FnKey {
             function_name: function.function_name.clone(),
+            runtime: function.runtime.clone(),
+            version: "LATEST".to_string(),
+            env_hash: "".to_string(),
         };
         
         let container = WarmContainer {
             container_id: "test-container".to_string(),
+            instance_id: "inst-2".to_string(),
             function_id: function.function_id,
             image_ref: "test-image".to_string(),
             created_at: Instant::now(),
             last_used: Instant::now() - Duration::from_secs(5), // 5 seconds ago
-            is_available: true,
+            state: crate::warm_pool::InstanceState::WarmIdle,
         };
         
         pool.add_warm_container(key.clone(), container).await;
@@ -173,12 +181,12 @@ mod tests {
         // Test with very old container
         let old_container = WarmContainer {
             container_id: "old-container".to_string(),
+            instance_id: "inst-3".to_string(),
             function_id: function.function_id,
             image_ref: "test-image".to_string(),
-            env_hash: "test-env".to_string(),
             created_at: Instant::now(),
             last_used: Instant::now() - Duration::from_secs(15), // 15 seconds ago
-            is_available: true,
+            state: crate::warm_pool::InstanceState::WarmIdle,
         };
         
         pool.add_warm_container(key.clone(), old_container).await;

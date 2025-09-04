@@ -11,6 +11,7 @@ use lambda_models::{
     RuntimeError, InitError, LambdaError, FunctionState, RoutingConfig, FunctionError,
 };
 use crate::scheduler::{Scheduler, run_dispatcher};
+use crate::pending::Pending;
 use crate::warm_pool::WarmPool;
 use crate::concurrency::ConcurrencyManager;
 
@@ -53,6 +54,12 @@ impl ControlPlane {
             config,
         })
     }
+
+    // Accessors for subsystems
+    pub fn warm_pool(&self) -> Arc<WarmPool> { self.warm_pool.clone() }
+    pub fn pending(&self) -> Pending { self.scheduler.pending() }
+    pub fn invoker(&self) -> Arc<lambda_invoker::Invoker> { self.invoker.clone() }
+    pub fn config(&self) -> lambda_models::Config { self.config.clone() }
 
     #[instrument(skip(self))]
     pub async fn create_function(&self, request: CreateFunctionRequest) -> Result<Function, LambdaError> {
@@ -567,11 +574,11 @@ impl ControlPlane {
         // 5) Build WorkItem
         let work_item = WorkItem::from_invoke_request(req_id.clone(), function.clone(), request.clone());
         
-        // 6) Ensure at least one warm container exists for this function
+        // 6) Ensure at least one warm container exists for this function-key (fn+rt+ver+env)
         // Important: do NOT consume availability here. Just check count to avoid
         // toggling a container to unavailable inadvertently.
-        let function_name = &work_item.function.function_name;
-        if self.warm_pool.container_count(function_name).await == 0 {
+        let fn_key = crate::queues::FnKey::from_work_item(&work_item);
+        if self.warm_pool.container_count(&fn_key).await == 0 {
             info!("No container present, creating new container for function: {}", function.function_name);
             
             // Build image reference
@@ -581,23 +588,57 @@ impl ControlPlane {
             let mut packaging_service = lambda_packaging::PackagingService::new(self.config.clone());
             packaging_service.build_image(&function, &image_ref).await?;
             
-            // Create container
-            let env_vars = function.environment.clone();
+            // Create container: generate instance id and inject as env
+            let instance_id = uuid::Uuid::new_v4().to_string();
+            let mut env_vars = function.environment.clone();
+            env_vars.insert("LAMBDAH_INSTANCE_ID".to_string(), instance_id.clone());
             let container_id = self.invoker.create_container(&function, &image_ref, env_vars).await?;
             self.invoker.start_container(&container_id).await?;
             
             // Add to warm pool
             let warm_container = crate::warm_pool::WarmContainer {
                 container_id: container_id.clone(),
+                instance_id: instance_id.clone(),
                 function_id: function.function_id,
                 image_ref: image_ref.clone(),
                 created_at: std::time::Instant::now(),
                 last_used: std::time::Instant::now(),
-                is_available: true, // Make it discoverable immediately
+                state: crate::warm_pool::InstanceState::WarmIdle, // Ready for work
             };
-            self.warm_pool.add_warm_container(function_name, warm_container).await;
+            self.warm_pool.add_warm_container(fn_key.clone(), warm_container).await;
             
             info!("Created and started new container: {} for function: {}", container_id, function.function_name);
+        } else if !self.warm_pool.has_available(&fn_key).await {
+            // Prefer restarting a stopped container for this key
+            if let Some(stopped_id) = self.warm_pool.get_one_stopped(&fn_key).await {
+                info!("Re-starting stopped container {} for function: {}", stopped_id, function.function_name);
+                self.invoker.start_container(&stopped_id).await?;
+                let _ = self.warm_pool.set_state_by_container_id(&stopped_id, crate::warm_pool::InstanceState::WarmIdle).await;
+            } else {
+                // All existing containers are busy; scale up by creating a new one
+                info!("All containers busy for {}. Scaling up by 1.", function.function_name);
+                let image_ref = format!("lambda-home/{}:{}", function.function_name, function.code_sha256);
+                let mut packaging_service = lambda_packaging::PackagingService::new(self.config.clone());
+                packaging_service.build_image(&function, &image_ref).await?;
+
+                let instance_id = uuid::Uuid::new_v4().to_string();
+                let mut env_vars = function.environment.clone();
+                env_vars.insert("LAMBDAH_INSTANCE_ID".to_string(), instance_id.clone());
+                let container_id = self.invoker.create_container(&function, &image_ref, env_vars).await?;
+                self.invoker.start_container(&container_id).await?;
+
+                let warm_container = crate::warm_pool::WarmContainer {
+                    container_id: container_id.clone(),
+                    instance_id: instance_id.clone(),
+                    function_id: function.function_id,
+                    image_ref: image_ref.clone(),
+                    created_at: std::time::Instant::now(),
+                    last_used: std::time::Instant::now(),
+                    state: crate::warm_pool::InstanceState::WarmIdle,
+                };
+                self.warm_pool.add_warm_container(fn_key, warm_container).await;
+                info!("Scaled up with new container: {} for function: {}", container_id, function.function_name);
+            }
         }
         
         // 7) Enqueue: scheduler.enqueue(work_item).await
@@ -717,8 +758,16 @@ impl ControlPlane {
         
         info!("Container polling for next invocation for function: {} runtime: {}", function_name, runtime);
         
-        // 1) Pop or wait: queues.pop_or_wait(function_name).await (lost-wakeup safe)
-        let work_item = self.scheduler.queues().pop_or_wait(function_name).await?;
+        // 1) Pop or wait: lost-wakeup safe, keyed by fn+rt+ver+env
+        let key = crate::queues::FnKey {
+            function_name: function_name.to_string(),
+            runtime: runtime.to_string(),
+            version: version.unwrap_or("LATEST").to_string(),
+            env_hash: env_hash.unwrap_or("").to_string(),
+        };
+        let work_item = self.scheduler.queues().pop_or_wait(&key).await?;
+
+        // Active marking handled by runtime API using instance header
         
         info!("Found work item: {} for function: {}", work_item.request_id, work_item.function.function_name);
         
@@ -757,6 +806,8 @@ impl ControlPlane {
         
         // pending.complete(&request_id, res) → 202 if delivered, 404 if no waiter (late / duplicate)
         let success = self.scheduler.pending().complete(&request_id, result);
+        // Best-effort: mark some active container back to WarmIdle
+        let _ = self.warm_pool.mark_any_active_to_idle().await;
         if success {
             info!("Successfully completed invocation: {}", request_id);
             Ok(())
@@ -797,6 +848,8 @@ impl ControlPlane {
         
         // pending.complete(&request_id, res) → 202 or 404 same as above
         let success = self.scheduler.pending().complete(&request_id, result);
+        // Best-effort: mark some active container back to WarmIdle
+        let _ = self.warm_pool.mark_any_active_to_idle().await;
         if success {
             info!("Successfully completed error invocation: {}", request_id);
             Ok(())
@@ -810,6 +863,14 @@ impl ControlPlane {
     pub async fn post_init_error(&self, error: InitError) -> Result<(), LambdaError> {
         // TODO: Implement posting init error from containers
         Ok(())
+    }
+
+    // Public helpers for runtime API to mark instance state
+    pub async fn mark_instance_active_by_id(&self, instance_id: &str) -> Option<(crate::queues::FnKey, String)> {
+        self.warm_pool.mark_active_by_instance(instance_id).await
+    }
+    pub async fn mark_instance_idle_by_id(&self, instance_id: &str) -> Option<(crate::queues::FnKey, String)> {
+        self.warm_pool.mark_idle_by_instance(instance_id).await
     }
 
     // Helper methods

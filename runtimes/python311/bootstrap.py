@@ -14,6 +14,7 @@ FUNCTION_VERSION = os.environ.get('AWS_LAMBDA_FUNCTION_VERSION')
 MEMORY_SIZE = os.environ.get('AWS_LAMBDA_FUNCTION_MEMORY_SIZE')
 LOG_GROUP_NAME = os.environ.get('AWS_LAMBDA_LOG_GROUP_NAME')
 LOG_STREAM_NAME = os.environ.get('AWS_LAMBDA_LOG_STREAM_NAME')
+INSTANCE_ID = os.environ.get('LAMBDAH_INSTANCE_ID')
 
 # Load the user's handler
 try:
@@ -31,6 +32,8 @@ def get_next_invocation():
     
     try:
         req = urllib.request.Request(url)
+        if INSTANCE_ID:
+            req.add_header('X-LambdaH-Instance-Id', INSTANCE_ID)
         req.add_header('User-Agent', 'lambda-runtime-interface-client')
         
         with urllib.request.urlopen(req) as response:
@@ -54,6 +57,8 @@ def post_response(request_id, response):
     try:
         data = json.dumps(response).encode('utf-8')
         req = urllib.request.Request(url, data=data)
+        if INSTANCE_ID:
+            req.add_header('X-LambdaH-Instance-Id', INSTANCE_ID)
         req.add_header('Content-Type', 'application/json')
         
         with urllib.request.urlopen(req) as response:
@@ -74,6 +79,8 @@ def post_error(request_id, error):
         
         data = json.dumps(error_data).encode('utf-8')
         req = urllib.request.Request(url, data=data)
+        if INSTANCE_ID:
+            req.add_header('X-LambdaH-Instance-Id', INSTANCE_ID)
         req.add_header('Content-Type', 'application/json')
         
         with urllib.request.urlopen(req) as response:
