@@ -1,8 +1,9 @@
 name: Release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   build:
@@ -59,7 +60,7 @@ jobs:
         run: |
           OS=${{ runner.os }}
           ARCH=${{ runner.arch }}
-          VERSION=${{ github.event.release.tag_name }}
+          VERSION=${{ github.ref_name }}
           # Use tag as-is (e.g., v1.2.3)
           # Normalize OS to conventional slug
           case "$OS" in
@@ -85,7 +86,7 @@ jobs:
           ARCH: ${{ runner.arch }}
         run: |
           $OS = "windows"
-          $VERSION = "${{ github.event.release.tag_name }}"
+          $VERSION = "${{ github.ref_name }}"
           $BIN = "target/release/lambda-at-home-server.exe"
           switch ($env:ARCH) {
             'X64'   { $archSlug = 'x86_64' }
@@ -129,10 +130,44 @@ jobs:
           done
           ls -la
 
-      - name: Upload assets to existing Release
+      - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.release.tag_name }}
+          tag_name: ${{ github.ref_name }}
+          name: Lambda@Home ${{ github.ref_name }}
+          body: |
+            ## Lambda@Home ${{ github.ref_name }}
+            
+            ### Installation
+            
+            Download and install the binary for your platform:
+            
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/fearlessfara/lambda-at-home/main/install-lambda-at-home.sh | bash
+            ```
+            
+            ### Manual Installation
+            
+            Download the appropriate binary for your platform and make it executable:
+            
+            - **Linux x86_64**: `lambda-at-home-server-${{ github.ref_name }}-linux-x86_64`
+            - **macOS x86_64**: `lambda-at-home-server-${{ github.ref_name }}-darwin-x86_64`
+            - **macOS ARM64**: `lambda-at-home-server-${{ github.ref_name }}-darwin-aarch64`
+            - **Windows x86_64**: `lambda-at-home-server-${{ github.ref_name }}-windows-x86_64.exe`
+            
+            ### Features
+            
+            - Docker-backed AWS Lambda clone
+            - Embedded web console
+            - Multi-runtime support (Node.js, Python, Rust)
+            - Warm container pool with auto-scaling
+            - AWS Lambda-compatible APIs
+            
+            ### Documentation
+            
+            See [INSTALL.md](INSTALL.md) for detailed installation instructions.
           files: release-assets/*
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
