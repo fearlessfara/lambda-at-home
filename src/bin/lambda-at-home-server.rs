@@ -8,6 +8,8 @@ use tokio::signal;
 use tracing::{info, warn};
 use sqlx::SqlitePool;
 use lambda_control::IdleWatchdog;
+use std::path::Path;
+use std::fs;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -21,6 +23,20 @@ async fn main() -> Result<()> {
     let config: Config = Config::default();
 
     info!("Configuration loaded: {:?}", config);
+
+    // Ensure data directory and DB parent directory exist when using SQLite
+    // Default DB URL format: sqlite://data/lhome.db
+    // SQLite auto-creates the file, but the parent directory must exist.
+    if !config.data.dir.is_empty() {
+        let _ = fs::create_dir_all(&config.data.dir);
+    }
+    if let Some(db_path) = config.data.db_url.strip_prefix("sqlite://") {
+        if let Some(parent) = Path::new(db_path).parent() {
+            if let Err(e) = fs::create_dir_all(parent) {
+                warn!("Failed to create DB parent directory {:?}: {}", parent, e);
+            }
+        }
+    }
 
     // Initialize database pool
     let pool = SqlitePool::connect(&config.data.db_url).await?;

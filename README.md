@@ -33,6 +33,9 @@ Lambda@Home consists of several components:
 
 ## Quick Start
 
+[![CI](https://github.com/fearlessfara/lambda-at-home/actions/workflows/ci.yml/badge.svg)](https://github.com/fearlessfara/lambda-at-home/actions/workflows/ci.yml)
+[![Release](https://github.com/fearlessfara/lambda-at-home/actions/workflows/release.yml/badge.svg)](https://github.com/fearlessfara/lambda-at-home/actions/workflows/release.yml)
+
 ### Prerequisites
 
 - Docker installed and running
@@ -60,12 +63,12 @@ make run
 ```
 
 The server will start on:
-- User API: http://127.0.0.1:9000
+- User API: http://127.0.0.1:9000/api
 - Runtime API: http://127.0.0.1:9001
-- Health: http://127.0.0.1:9000/healthz
-- Metrics: http://127.0.0.1:9000/metrics
+- Health: http://127.0.0.1:9000/api/healthz
+- Metrics: http://127.0.0.1:9000/api/metrics
 
-### Web Console (optional, recommended)
+### Web Console (dev mode, optional)
 
 Run the Console for easier management and testing:
 
@@ -76,10 +79,10 @@ npm run dev
 # open http://localhost:3000
 ```
 
-Configure the API base URL via `console/.env` (defaults to `http://localhost:9000`):
+Configure the API base URL via `console/.env` (defaults to `/api` in production builds):
 
 ```
-VITE_API_URL=http://localhost:9000
+VITE_API_URL=http://localhost:9000/api
 ```
 
 ### Create and invoke a function (curl)
@@ -163,8 +166,8 @@ max_global_concurrency = 256
 - `PUT /2015-03-31/functions/{name}/concurrency` - Set reserved concurrency
 - `GET /2015-03-31/functions/{name}/concurrency` - Get reserved concurrency
 - `DELETE /2015-03-31/functions/{name}/concurrency` - Clear reserved concurrency
-- `GET /healthz` - Health check
-- `GET /metrics` - Prometheus metrics
+- `GET /api/healthz` - Health check
+- `GET /api/metrics` - Prometheus metrics
 
 ### API Gateway Path Proxy
 
@@ -181,9 +184,9 @@ Function results are mapped back to HTTP as follows:
 
 Admin endpoints for routes:
 
-- `GET /admin/api-gateway/routes` – list routes
-- `POST /admin/api-gateway/routes` – create route `{ path, method?, function_name }`
-- `DELETE /admin/api-gateway/routes/:id` – delete route
+- `GET /api/admin/api-gateway/routes` – list routes
+- `POST /api/admin/api-gateway/routes` – create route `{ path, method?, function_name }`
+- `DELETE /api/admin/api-gateway/routes/:id` – delete route
 
 ### Runtime API (For Containers)
 
@@ -301,6 +304,17 @@ docker logs <container_id>
 ## License
 
 MIT License - see LICENSE file for details.
+
+## Releases
+
+Tagged builds (vX.Y.Z) trigger the release workflow and publish platform binaries with the web console embedded. Download from GitHub Releases.
+
+Local release build:
+
+```bash
+make release
+./target/release/lambda-at-home-server
+```
 
 ## Roadmap
  
