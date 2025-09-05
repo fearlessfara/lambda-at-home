@@ -2,11 +2,13 @@ pub mod config;
 pub mod function;
 pub mod invoke;
 pub mod error;
+pub mod routes;
 
 pub use config::*;
 pub use function::*;
 pub use invoke::*;
 pub use error::*;
+pub use routes::*;
 
 #[cfg(test)]
 mod tests {

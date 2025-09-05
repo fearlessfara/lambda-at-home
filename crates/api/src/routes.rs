@@ -2,7 +2,7 @@ use axum::{
     routing::{get, post, put, delete, any},
     Router,
 };
-use crate::{AppState, handlers::*};
+use crate::{AppState, handlers::*, handlers::warm_pool_summary};
 
 pub fn create_router() -> Router<AppState> {
     Router::new()
@@ -38,6 +38,12 @@ pub fn create_router() -> Router<AppState> {
         // Health and metrics
         .route("/healthz", get(health_check))
         .route("/metrics", get(metrics))
+        // Warm pool admin
+        .route("/admin/warm-pool/:name", get(warm_pool_summary))
+        // API Gateway routes admin
+        .route("/admin/api-gateway/routes", get(list_api_routes))
+        .route("/admin/api-gateway/routes", post(create_api_route))
+        .route("/admin/api-gateway/routes/:id", delete(delete_api_route))
         .fallback(any(api_gateway_proxy))
 }
 

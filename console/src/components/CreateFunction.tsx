@@ -23,6 +23,7 @@ export function CreateFunction() {
     timeout: 3,
     memorySize: 512,
   });
+  const [envRows, setEnvRows] = useState<{ key: string; value: string }[]>([]);
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -77,6 +78,11 @@ export function CreateFunction() {
     try {
       const base64Zip = await convertFileToBase64(zipFile);
       
+      const env: Record<string, string> = {};
+      // Collect env rows into a map
+      // Only include keys that are non-empty
+      envRows.filter(r => r.key).forEach(r => { env[r.key] = r.value; });
+      
       const requestData = {
         function_name: formData.functionName,
         runtime: formData.runtime,
@@ -87,6 +93,7 @@ export function CreateFunction() {
         description: formData.description || undefined,
         timeout: formData.timeout,
         memory_size: formData.memorySize,
+        environment: Object.keys(env).length ? env : undefined,
         publish: true,
       };
 
@@ -112,6 +119,8 @@ export function CreateFunction() {
   const getDefaultHandler = (runtime: string) => {
     switch (runtime) {
       case 'nodejs18.x':
+        return 'index.handler';
+      case 'nodejs22.x':
         return 'index.handler';
       case 'python3.11':
         return 'lambda_function.lambda_handler';
@@ -226,6 +235,42 @@ export function CreateFunction() {
                   min="128"
                   max="10240"
                 />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Environment Variables</Label>
+              {envRows.map((r, idx) => (
+                <div key={idx} className="grid grid-cols-2 gap-2 mt-1">
+                  <Input
+                    placeholder="KEY"
+                    value={r.key}
+                    onChange={(e) => {
+                      const arr = [...envRows];
+                      arr[idx] = { ...r, key: e.target.value };
+                      setEnvRows(arr);
+                    }}
+                  />
+                  <Input
+                    placeholder="value"
+                    value={r.value}
+                    onChange={(e) => {
+                      const arr = [...envRows];
+                      arr[idx] = { ...r, value: e.target.value };
+                      setEnvRows(arr);
+                    }}
+                  />
+                </div>
+              ))}
+              <div className="mt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() => setEnvRows([...envRows, { key: '', value: '' }])}
+                >
+                  Add variable
+                </Button>
               </div>
             </div>
 

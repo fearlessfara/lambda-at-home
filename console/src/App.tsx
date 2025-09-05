@@ -1,5 +1,5 @@
 
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from './components/ui/toaster';
 import { Layout } from './components/Layout';
@@ -7,6 +7,7 @@ import { FunctionList } from './components/FunctionList';
 import { CreateFunction } from './components/CreateFunction';
 import { FunctionDetail } from './components/FunctionDetail';
 import { HealthCheck } from './components/HealthCheck';
+import { ApiGateway } from './components/ApiGateway';
 
 // Create a client
 const queryClient = new QueryClient({
@@ -28,6 +29,7 @@ function App() {
             <Route path="/functions" element={<FunctionList />} />
             <Route path="/functions/create" element={<CreateFunction />} />
             <Route path="/functions/:name" element={<FunctionDetail />} />
+            <Route path="/api-gateway" element={<ApiGateway />} />
             <Route path="/health" element={<HealthCheck />} />
           </Routes>
         </Layout>

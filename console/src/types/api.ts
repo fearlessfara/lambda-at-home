@@ -78,6 +78,7 @@ export interface ErrorShape {
 // Available runtimes
 export const AVAILABLE_RUNTIMES = [
   'nodejs18.x',
+  'nodejs22.x',
   'python3.11',
   'rust'
 ] as const;

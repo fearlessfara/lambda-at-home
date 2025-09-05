@@ -58,3 +58,16 @@ export function useHealthCheck() {
     retry: 3,
   });
 }
+
+
+export function useUpdateFunctionConfiguration() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, data }: { name: string; data: Partial<{ handler: string; timeout: number; memory_size: number; environment: Record<string,string>; description?: string }> }) =>
+      api.updateFunctionConfiguration(name, data as any),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['functions'] });
+      queryClient.invalidateQueries({ queryKey: ['function', variables.name] });
+    },
+  });
+}

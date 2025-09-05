@@ -325,4 +325,47 @@ impl WarmPool {
         }
         None
     }
+
+    /// Build a summary for a given function name across all keys (versions/envs).
+    pub async fn summary_for_function(&self, function_name: &str) -> WarmPoolSummary {
+        let now = Instant::now();
+        let containers = self.containers.lock().await;
+        let mut warm_idle = 0usize;
+        let mut active = 0usize;
+        let mut stopped = 0usize;
+        let mut entries = Vec::new();
+        for (key, list) in containers.iter() {
+            if key.function_name != function_name { continue; }
+            for c in list.iter() {
+                match c.state {
+                    InstanceState::WarmIdle => warm_idle += 1,
+                    InstanceState::Active => active += 1,
+                    InstanceState::Stopped => stopped += 1,
+                    _ => {}
+                }
+                entries.push(WarmPoolEntry {
+                    container_id: c.container_id.clone(),
+                    state: format!("{:?}", c.state),
+                    idle_for_ms: now.saturating_duration_since(c.last_used).as_millis() as u64,
+                });
+            }
+        }
+        WarmPoolSummary { total: warm_idle+active+stopped, warm_idle, active, stopped, entries }
+    }
+}
+
+#[derive(serde::Serialize)]
+pub struct WarmPoolSummary {
+    pub total: usize,
+    pub warm_idle: usize,
+    pub active: usize,
+    pub stopped: usize,
+    pub entries: Vec<WarmPoolEntry>,
+}
+
+#[derive(serde::Serialize)]
+pub struct WarmPoolEntry {
+    pub container_id: String,
+    pub state: String,
+    pub idle_for_ms: u64,
 }

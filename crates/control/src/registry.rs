@@ -9,6 +9,7 @@ use lambda_models::{
     UpdateAliasRequest, ConcurrencyConfig, ListFunctionsResponse, ListVersionsResponse,
     ListAliasesResponse, InvokeRequest, InvokeResponse, RuntimeInvocation, RuntimeResponse,
     RuntimeError, InitError, LambdaError, FunctionState, RoutingConfig, FunctionError,
+    ApiRoute, CreateApiRouteRequest, ListApiRoutesResponse,
 };
 use crate::scheduler::{Scheduler, run_dispatcher};
 use crate::pending::Pending;
@@ -75,6 +76,85 @@ impl ControlPlane {
     pub fn invoker(&self) -> Arc<lambda_invoker::Invoker> { self.invoker.clone() }
     pub fn config(&self) -> lambda_models::Config { self.config.clone() }
     pub fn queues(&self) -> Queues { self.scheduler.queues() }
+
+    // ---------------- API Gateway Route Management ----------------
+    pub async fn create_api_route(&self, req: CreateApiRouteRequest) -> Result<ApiRoute, LambdaError> {
+        if !self.function_exists(&req.function_name).await? {
+            return Err(LambdaError::FunctionNotFound { function_name: req.function_name });
+        }
+        let route_id = Uuid::new_v4();
+        let created_at = chrono::Utc::now();
+        let path = normalize_path(&req.path);
+        let method = req.method.as_ref().map(|m| m.to_uppercase());
+
+        sqlx::query(
+            "INSERT INTO api_routes (route_id, path, method, function_name, created_at) VALUES (?, ?, ?, ?, ?)"
+        )
+        .bind(&route_id)
+        .bind(&path)
+        .bind(&method)
+        .bind(&req.function_name)
+        .bind(&created_at)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| LambdaError::SqlxError(e))?;
+
+        Ok(ApiRoute { route_id, path, method, function_name: req.function_name, created_at })
+    }
+
+    pub async fn list_api_routes(&self) -> Result<ListApiRoutesResponse, LambdaError> {
+        let rows = sqlx::query("SELECT * FROM api_routes ORDER BY path")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| LambdaError::SqlxError(e))?;
+        let mut routes = Vec::with_capacity(rows.len());
+        for row in rows.iter() {
+            routes.push(ApiRoute {
+                route_id: row.try_get("route_id").map_err(|e| LambdaError::SqlxError(e))?,
+                path: row.try_get("path").map_err(|e| LambdaError::SqlxError(e))?,
+                method: row.try_get("method").map_err(|e| LambdaError::SqlxError(e))?,
+                function_name: row.try_get("function_name").map_err(|e| LambdaError::SqlxError(e))?,
+                created_at: row.try_get("created_at").map_err(|e| LambdaError::SqlxError(e))?,
+            });
+        }
+        Ok(ListApiRoutesResponse { routes })
+    }
+
+    pub async fn delete_api_route(&self, route_id: Uuid) -> Result<(), LambdaError> {
+        let result = sqlx::query("DELETE FROM api_routes WHERE route_id = ?")
+            .bind(route_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| LambdaError::SqlxError(e))?;
+        if result.rows_affected() == 0 {
+            return Err(LambdaError::InvalidRequest { reason: "Route not found".to_string() });
+        }
+        Ok(())
+    }
+
+    pub async fn resolve_api_route(&self, method: &str, path: &str) -> Result<Option<String>, LambdaError> {
+        let norm_path = normalize_path(path);
+        let upper_m = method.to_uppercase();
+        let rows = sqlx::query("SELECT path, method, function_name FROM api_routes")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| LambdaError::SqlxError(e))?;
+        let mut best: Option<(usize, String)> = None;
+        for row in rows.iter() {
+            let r_path: String = row.try_get("path").map_err(|e| LambdaError::SqlxError(e))?;
+            let r_method: Option<String> = row.try_get("method").map_err(|e| LambdaError::SqlxError(e))?;
+            let fname: String = row.try_get("function_name").map_err(|e| LambdaError::SqlxError(e))?;
+            if !norm_path.starts_with(&r_path) { continue; }
+            if let Some(m) = r_method.as_ref() {
+                if m.to_uppercase() != upper_m { continue; }
+            }
+            let plen = r_path.len();
+            if best.as_ref().map(|(l, _)| *l).unwrap_or(0) < plen {
+                best = Some((plen, fname));
+            }
+        }
+        Ok(best.map(|(_, f)| f))
+    }
 
     #[instrument(skip(self))]
     pub async fn create_function(&self, request: CreateFunctionRequest) -> Result<Function, LambdaError> {
@@ -653,9 +733,9 @@ impl ControlPlane {
                 };
                 self.warm_pool.add_warm_container(fn_key, warm_container).await;
                 info!("Scaled up with new container: {} for function: {}", container_id, function.function_name);
-            }
-        }
-        
+    }
+}
+
         // 7) Enqueue: scheduler.enqueue(work_item).await
         self.scheduler.enqueue(work_item).await.map_err(|e| LambdaError::InternalError { 
             reason: format!("Failed to enqueue work item: {}", e) 
@@ -936,4 +1016,10 @@ impl ControlPlane {
             last_modified: row.try_get("last_modified").map_err(|e| LambdaError::SqlxError(e))?,
         })
     }
+}
+
+fn normalize_path(p: &str) -> String {
+    let mut s = if p.starts_with('/') { p.to_string() } else { format!("/{}", p) };
+    if s.len() > 1 && s.ends_with('/') { s.pop(); }
+    s
 }

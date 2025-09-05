@@ -46,15 +46,17 @@ function makeHttpRequest(url, method, headers, timeout) {
     const isHttps = urlObj.protocol === 'https:';
     const client = isHttps ? https : http;
     
+    // Sanitize incoming headers: never forward Host/host to a different origin
+    const sanitizedHeaders = { 'User-Agent': 'lambda-at-home-api-caller', ...headers };
+    delete sanitizedHeaders.host; delete sanitizedHeaders.Host; delete sanitizedHeaders[":authority"]; // in case
+
     const options = {
       hostname: urlObj.hostname,
       port: urlObj.port || (isHttps ? 443 : 80),
       path: urlObj.pathname + urlObj.search,
       method: method.toUpperCase(),
-      headers: {
-        'User-Agent': 'lambda-at-home-api-caller',
-        ...headers
-      },
+      headers: sanitizedHeaders,
+      servername: urlObj.hostname, // ensure SNI/verification uses target host
       timeout: timeout
     };
 

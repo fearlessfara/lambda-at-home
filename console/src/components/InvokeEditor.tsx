@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Play, Copy, Check } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -15,6 +15,8 @@ export function InvokeEditor({ functionName }: InvokeEditorProps) {
   const [result, setResult] = useState<any>(null);
   const [isValidJson, setIsValidJson] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [presetName, setPresetName] = useState('');
+  const [presets, setPresets] = useState<{ name: string; payload: string }[]>([]);
   
   const invokeFunction = useInvokeFunction();
   const { toast } = useToast();
@@ -99,6 +101,24 @@ export function InvokeEditor({ functionName }: InvokeEditorProps) {
     }
   };
 
+
+  // Presets persistence in localStorage per function
+  const lsKey = `invoke-presets:${functionName}`;
+  useEffect(()=>{
+    try { const raw = localStorage.getItem(lsKey); if (raw) setPresets(JSON.parse(raw)); } catch {}
+  },[functionName]);
+  const savePresets = (arr: any)=> localStorage.setItem(lsKey, JSON.stringify(arr));
+  const onSavePreset = () => {
+    if (!presetName) return;
+    const next = [...presets.filter(p=>p.name!==presetName), {name: presetName, payload}];
+    setPresets(next); savePresets(next);
+  };
+  const onLoadPreset = (name: string) => {
+    const p = presets.find(p=>p.name===name); if (p) { setPayload(p.payload); validateJson(p.payload); }
+  };
+  const onDeletePreset = (name: string) => {
+    const next = presets.filter(p=>p.name!==name); setPresets(next); savePresets(next);
+  };
   const formatResult = (result: any) => {
     if (result.error) {
       return JSON.stringify({ error: result.error }, null, 2);
@@ -119,6 +139,21 @@ export function InvokeEditor({ functionName }: InvokeEditorProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="grid grid-cols-3 gap-2 items-end">
+            <div className="col-span-2">
+              <label className="text-sm font-medium">Preset Name</label>
+              <input className="mt-1 w-full border rounded px-2 py-1 text-sm" value={presetName} onChange={e=>setPresetName(e.target.value)} placeholder="e.g., Hello World" />
+            </div>
+            <div className="flex space-x-2">
+              <Button type="button" variant="outline" onClick={onSavePreset}>Save Preset</Button>
+              {presets.length>0 && (
+                <select className="border rounded px-2 py-1 text-sm" onChange={e=>onLoadPreset(e.target.value)}>
+                  <option value="">Load preset…</option>
+                  {presets.map(p=> <option key={p.name} value={p.name}>{p.name}</option>)}
+                </select>
+              )}
+            </div>
+          </div>
           <div>
             <label className="text-sm font-medium">Test Event</label>
             <div className="mt-2 border rounded-md overflow-hidden">

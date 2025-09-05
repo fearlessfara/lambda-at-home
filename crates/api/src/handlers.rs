@@ -12,7 +12,7 @@ use lambda_models::{
     CreateFunctionRequest, UpdateFunctionCodeRequest, UpdateFunctionConfigurationRequest,
     PublishVersionRequest, CreateAliasRequest, UpdateAliasRequest, ConcurrencyConfig,
     ListFunctionsResponse, ListVersionsResponse, ListAliasesResponse, InvokeRequest,
-    FunctionError, ErrorShape,
+    FunctionError, ErrorShape, CreateApiRouteRequest, ListApiRoutesResponse, ApiRoute,
 };
 use crate::AppState;
 use tracing::{info, error, instrument};
@@ -417,21 +417,80 @@ pub async fn metrics(
     }
 }
 
+#[instrument(skip(state))]
+pub async fn warm_pool_summary(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+) -> Result<Json<lambda_control::warm_pool::WarmPoolSummary>, (StatusCode, Json<ErrorShape>)> {
+    let summary = state.control.warm_pool().summary_for_function(&name).await;
+    Ok(Json(summary))
+}
+
+// -------- API Gateway routes admin --------
+#[instrument(skip(state))]
+pub async fn list_api_routes(
+    State(state): State<AppState>,
+) -> Result<Json<ListApiRoutesResponse>, (StatusCode, Json<ErrorShape>)> {
+    match state.control.list_api_routes().await {
+        Ok(resp) => Ok(Json(resp)),
+        Err(e) => Err((StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR), Json(e.to_error_shape())))
+    }
+}
+
+#[instrument(skip(state))]
+pub async fn create_api_route(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateApiRouteRequest>,
+) -> Result<Json<ApiRoute>, (StatusCode, Json<ErrorShape>)> {
+    match state.control.create_api_route(payload).await {
+        Ok(route) => Ok(Json(route)),
+        Err(e) => Err((StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR), Json(e.to_error_shape())))
+    }
+}
+
+#[instrument(skip(state))]
+pub async fn delete_api_route(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorShape>)> {
+    let uuid = match uuid::Uuid::parse_str(&id) {
+        Ok(u) => u,
+        Err(_) => return Err((StatusCode::BAD_REQUEST, Json(ErrorShape { error_message: "Invalid route id".into(), error_type: "BadRequest".into(), stack_trace: None }))),
+    };
+    match state.control.delete_api_route(uuid).await {
+        Ok(()) => Ok(StatusCode::NO_CONTENT),
+        Err(e) => Err((StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR), Json(e.to_error_shape())))
+    }
+}
 
 // API Gateway-style proxy: path name equals function name
 // Captures any unmatched path and invokes a function named by the first segment.
 #[instrument(skip(state, req))]
 pub async fn api_gateway_proxy(
     State(state): State<AppState>,
-    mut req: Request<Body>,
+    req: Request<Body>,
 ) -> impl IntoResponse {
     let uri = req.uri().clone();
     let path = uri.path().to_string();
     let mut segs = path.trim_start_matches('/').split('/');
-    let func_name = match segs.next() {
-        Some(s) if !s.is_empty() => s.to_string(),
-        _ => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error":"Function name not provided"}))).into_response(),
+    // First try to resolve via configured API routes (longest prefix, optional method)
+    let method_str = req.method().to_string();
+    let resolved = match state.control.resolve_api_route(&method_str, &path).await { Ok(r) => r, Err(_) => None };
+    let mut from_mapping = false;
+    let func_name = if let Some(f) = resolved { from_mapping = true; f } else {
+        match segs.next() {
+            Some(s) if !s.is_empty() => s.to_string(),
+            _ => return (StatusCode::NOT_FOUND, Body::from("Not Found")).into_response(),
+        }
     };
+
+    // If no mapping was found and we're about to treat the first path segment as a function name,
+    // verify that the function actually exists. If not, return a clean 404 instead of invoking.
+    if !from_mapping {
+        if state.control.get_function(&func_name).await.is_err() {
+            return (StatusCode::NOT_FOUND, Body::from("Not Found")).into_response();
+        }
+    }
 
     // Build API Gateway proxy-like event
     let method = req.method().to_string();
@@ -488,12 +547,36 @@ pub async fn api_gateway_proxy(
                     return (StatusCode::from_u16(status as u16).unwrap_or(StatusCode::OK), headers, body_bytes).into_response();
                 }
             }
-            // Default: return JSON payload as body with status code
+            // Default mapping heuristics:
+            // - If payload is an object with a 'body' field, treat like APIGW result (status default 200)
+            // - If payload is a bare string, return as text body
+            // - Else return JSON payload
             let status = StatusCode::from_u16(resp.status_code).unwrap_or(StatusCode::OK);
             let mut headers = HeaderMap::new();
             for (k,v) in resp.headers {
                 if let Ok(name) = HeaderName::from_bytes(k.as_bytes()) {
                     if let Ok(val) = HeaderValue::from_str(&v) { headers.insert(name, val); }
+                }
+            }
+            if let Some(payload) = &resp.payload {
+                if let Some(obj) = payload.as_object() {
+                    if let Some(body) = obj.get("body") {
+                        let status = obj.get("statusCode").and_then(|v| v.as_u64()).map(|s| StatusCode::from_u16(s as u16).unwrap_or(StatusCode::OK)).unwrap_or(status);
+                        if let Some(hs) = obj.get("headers").and_then(|v| v.as_object()) {
+                            for (k,v) in hs.iter() {
+                                if let Some(s) = v.as_str() {
+                                    if let Ok(name) = HeaderName::from_bytes(k.as_bytes()) {
+                                        if let Ok(val) = HeaderValue::from_str(s) { headers.insert(name, val); }
+                                    }
+                                }
+                            }
+                        }
+                        let body_bytes = if body.is_string() { Body::from(body.as_str().unwrap().to_owned()) } else { Body::from(body.to_string()) };
+                        return (status, headers, body_bytes).into_response();
+                    }
+                }
+                if payload.is_string() {
+                    return (status, headers, Body::from(payload.as_str().unwrap().to_owned())).into_response();
                 }
             }
             (status, headers, Json(resp.payload.unwrap_or(serde_json::Value::Null))).into_response()

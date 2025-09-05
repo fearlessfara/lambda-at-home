@@ -44,6 +44,65 @@ export const api = {
     return handleResponse(response);
   },
 
+  // API Gateway-style proxy invocation
+  async invokeViaProxy(
+    name: string,
+    opts: { method: string; pathSuffix?: string; headers?: Record<string,string>; query?: Record<string,string>; body?: string }
+  ): Promise<{ status: number; headers: Record<string,string>; bodyText: string }> {
+    const path = `/${encodeURIComponent(name)}${opts.pathSuffix || ''}`;
+    const qs = opts.query && Object.keys(opts.query).length
+      ? `?${new URLSearchParams(opts.query).toString()}`
+      : '';
+    const url = `${API_BASE_URL}${path}${qs}`;
+
+    const init: RequestInit = {
+      method: opts.method || 'GET',
+      headers: opts.headers || {},
+    };
+    if (opts.body && init.method !== 'GET') {
+      init.body = opts.body;
+    }
+
+    const res = await fetch(url, init);
+    const text = await res.text();
+    const headers: Record<string,string> = {};
+    res.headers.forEach((v, k) => { headers[k] = v; });
+    return { status: res.status, headers, bodyText: text };
+  },
+
+  // Raw path request against API server (for API Gateway testing)
+  async requestPath(
+    path: string,
+    opts: { method: string; headers?: Record<string,string>; query?: Record<string,string>; body?: string }
+  ): Promise<{ status: number; headers: Record<string,string>; bodyText: string }> {
+    const qs = opts.query && Object.keys(opts.query).length
+      ? `?${new URLSearchParams(opts.query).toString()}`
+      : '';
+    const url = `${API_BASE_URL}${path}${qs}`;
+    const init: RequestInit = { method: opts.method || 'GET', headers: opts.headers || {} };
+    if (opts.body && init.method !== 'GET') init.body = opts.body;
+    const res = await fetch(url, init);
+    const text = await res.text();
+    const headers: Record<string,string> = {}; res.headers.forEach((v,k)=> headers[k]=v);
+    return { status: res.status, headers, bodyText: text };
+  },
+
+  // API Gateway routes admin
+  async listApiRoutes(): Promise<{ routes: { route_id: string; path: string; method?: string; function_name: string; created_at: string }[] }> {
+    const res = await fetch(`${API_BASE_URL}/admin/api-gateway/routes`);
+    return handleResponse(res);
+  },
+  async createApiRoute(data: { path: string; method?: string; function_name: string }): Promise<{ route_id: string; path: string; method?: string; function_name: string; created_at: string }> {
+    const res = await fetch(`${API_BASE_URL}/admin/api-gateway/routes`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+  async deleteApiRoute(id: string): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/admin/api-gateway/routes/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!res.ok) throw new ApiError(`HTTP ${res.status}`, res.status);
+  },
+
   async getFunction(name: string): Promise<Function> {
     const response = await fetch(`${API_BASE_URL}/2015-03-31/functions/${encodeURIComponent(name)}`);
     return handleResponse(response);
@@ -56,6 +115,23 @@ export const api = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  async updateFunctionConfiguration(name: string, data: Partial<Pick<Function,
+    'handler' | 'timeout' | 'memory_size' | 'environment' | 'description'>>): Promise<Function> {
+    // Map field names to API expectations
+    const payload: any = {};
+    if (data.handler !== undefined) payload.handler = data.handler;
+    if (data.timeout !== undefined) payload.timeout = data.timeout;
+    if (data.memory_size !== undefined) payload.memory_size = data.memory_size;
+    if (data.environment !== undefined) payload.environment = data.environment as Record<string,string>;
+    if (data.description !== undefined) payload.description = data.description;
+    const response = await fetch(`${API_BASE_URL}/2015-03-31/functions/${encodeURIComponent(name)}/configuration`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     });
     return handleResponse(response);
   },
@@ -130,8 +206,20 @@ export const api = {
       logResult: response.headers.get('X-Amz-Log-Result') || undefined,
       duration,
     };
+
   },
 
+  // Warm pool summary
+  async warmPoolSummary(name: string): Promise<{
+    total: number;
+    warm_idle: number;
+    active: number;
+    stopped: number;
+    entries: { container_id: string; state: string; idle_for_ms: number }[];
+  }> {
+    const response = await fetch(`${API_BASE_URL}/admin/warm-pool/${encodeURIComponent(name)}`);
+    return handleResponse(response);
+  },
   // Health check
   async healthCheck(): Promise<string> {
     const response = await fetch(`${API_BASE_URL}/healthz`);
