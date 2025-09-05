@@ -32,6 +32,12 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
+      - name: Build Console (required for embedded assets)
+        working-directory: console
+        run: |
+          npm ci
+          npm run build
+
       - name: Build (workspace)
         run: |
           rustc -V
@@ -53,9 +59,3 @@ jobs:
           path: console/node_modules
           key: ${{ runner.os }}-npm-${{ hashFiles('console/package-lock.json') }}
           restore-keys: ${{ runner.os }}-npm-
-
-      - name: Build Console (type-check)
-        working-directory: console
-        run: |
-          npm ci
-          npm run build

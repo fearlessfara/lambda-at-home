@@ -21,11 +21,12 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Build Console (embedded in binary)
-        working-directory: console
-        run: |
-          npm ci
-          npm run build
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: console/node_modules
+          key: ${{ runner.os }}-npm-${{ hashFiles('console/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-npm-
 
       - name: Install Rust (stable, pin to local)
         uses: dtolnay/rust-toolchain@stable
@@ -42,6 +43,12 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build Console (embedded in binary)
+        working-directory: console
+        run: |
+          npm ci
+          npm run build
 
       - name: Build release binary
         run: cargo build --release --bin lambda-at-home-server
