@@ -6,7 +6,39 @@ on:
       - 'v*'
 
 jobs:
+  build-console:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: console/node_modules
+          key: npm-${{ hashFiles('console/package-lock.json') }}
+          restore-keys: npm-
+
+      - name: Build Console (shared across all platforms)
+        working-directory: console
+        run: |
+          npm ci
+          npm run build
+
+      - name: Upload console build
+        uses: actions/upload-artifact@v4
+        with:
+          name: console-build
+          path: console/dist/
+          retention-days: 1
+
   build:
+    needs: build-console
     runs-on: ${{ matrix.os }}
     env:
       RUSTUP_TOOLCHAIN: 1.88.0
@@ -29,17 +61,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Download console build
+        uses: actions/download-artifact@v4
         with:
-          node-version: '18'
-
-      - name: Cache npm
-        uses: actions/cache@v4
-        with:
-          path: console/node_modules
-          key: ${{ runner.os }}-npm-${{ hashFiles('console/package-lock.json') }}
-          restore-keys: ${{ runner.os }}-npm-
+          name: console-build
+          path: console/dist/
 
       - name: Install Rust (stable, pin to local)
         uses: dtolnay/rust-toolchain@stable
@@ -57,12 +83,6 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
-      - name: Build Console (embedded in binary)
-        working-directory: console
-        run: |
-          npm ci
-          npm run build
-
       - name: Build release binary
         run: cargo build --release --bin lambda-at-home-server
 
@@ -71,22 +91,24 @@ jobs:
         run: |
           mkdir -p release-assets
           
-          # Determine binary name based on OS
+          # Determine binary name and final filename based on OS
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             binary_name="lambda-at-home-server.exe"
+            final_name="lambda-at-home-server-${{ github.ref_name }}-${{ matrix.platform }}.exe"
           else
             binary_name="lambda-at-home-server"
+            final_name="lambda-at-home-server-${{ github.ref_name }}-${{ matrix.platform }}"
           fi
           
           # Copy binary with platform-specific naming
-          cp "target/release/${binary_name}" "release-assets/lambda-at-home-server-${{ github.ref_name }}-${{ matrix.platform }}"
+          cp "target/release/${binary_name}" "release-assets/${final_name}"
           
           # Make executable (Unix only)
           if [[ "${{ runner.os }}" != "Windows" ]]; then
-            chmod +x "release-assets/lambda-at-home-server-${{ github.ref_name }}-${{ matrix.platform }}"
+            chmod +x "release-assets/${final_name}"
           fi
           
-          echo "✅ Packaged ${{ runner.os }} ${{ matrix.arch }} binary: lambda-at-home-server-${{ github.ref_name }}-${{ matrix.platform }}"
+          echo "✅ Packaged ${{ runner.os }} ${{ matrix.arch }} binary: ${final_name}"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
