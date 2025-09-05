@@ -16,6 +16,8 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -31,7 +33,10 @@ jobs:
         run: cargo fmt -- --check
 
       - name: Clippy
-        run: cargo clippy -- -D warnings
+        run: |
+          rustc -V
+          cargo -V
+          cargo clippy -- -D warnings
 
       - name: Unit tests (workspace libs)
         run: cargo test --workspace --lib
@@ -53,4 +58,3 @@ jobs:
         run: |
           npm ci
           npm run build
-
