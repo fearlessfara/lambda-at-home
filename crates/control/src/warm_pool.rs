@@ -1,11 +1,11 @@
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use uuid::Uuid;
-use lambda_models::LambdaError;
-use tracing::{info, error, instrument};
 use crate::queues::FnKey;
+use lambda_models::LambdaError;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::Mutex;
+use tracing::{error, info, instrument};
+use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct WarmContainer {
@@ -54,13 +54,16 @@ impl WarmPool {
                 if container.state == InstanceState::WarmIdle {
                     container.state = InstanceState::Active;
                     container.last_used = Instant::now();
-                    
-                    info!("Reusing warm container: {} for function: {}", container.container_id, key.function_name);
+
+                    info!(
+                        "Reusing warm container: {} for function: {}",
+                        container.container_id, key.function_name
+                    );
                     return Some(container.clone());
                 }
             }
         }
-        
+
         None
     }
 
@@ -116,19 +119,25 @@ impl WarmPool {
     #[instrument(skip(self))]
     pub async fn add_warm_container(&self, key: FnKey, container: WarmContainer) {
         let container_id = container.container_id.clone();
-        
+
         let mut containers = self.containers.lock().await;
         containers
             .entry(key.clone())
             .or_insert_with(Vec::new)
             .push(container);
-        
-        info!("Added warm container: {} for function: {}", 
-              container_id, key.function_name);
+
+        info!(
+            "Added warm container: {} for function: {}",
+            container_id, key.function_name
+        );
     }
 
     #[instrument(skip(self))]
-    pub async fn return_container(&self, key: &FnKey, container_id: &str) -> Result<(), LambdaError> {
+    pub async fn return_container(
+        &self,
+        key: &FnKey,
+        container_id: &str,
+    ) -> Result<(), LambdaError> {
         let mut containers = self.containers.lock().await;
         if let Some(container_list) = containers.get_mut(key) {
             for container in container_list.iter_mut() {
@@ -140,43 +149,55 @@ impl WarmPool {
                 }
             }
         }
-        
+
         error!("Container not found in warm pool: {}", container_id);
-        Err(LambdaError::InvalidRequest { reason: "Container not found".to_string() })
+        Err(LambdaError::InvalidRequest {
+            reason: "Container not found".to_string(),
+        })
     }
 
     #[instrument(skip(self))]
-    pub async fn remove_container(&self, key: &FnKey, container_id: &str) -> Result<(), LambdaError> {
+    pub async fn remove_container(
+        &self,
+        key: &FnKey,
+        container_id: &str,
+    ) -> Result<(), LambdaError> {
         let mut containers = self.containers.lock().await;
         if let Some(container_list) = containers.get_mut(key) {
             container_list.retain(|container| container.container_id != container_id);
-            
+
             // Remove empty entries
             if container_list.is_empty() {
                 containers.remove(key);
             }
-            
+
             info!("Removed container from warm pool: {}", container_id);
             Ok(())
         } else {
             error!("Container not found in warm pool: {}", container_id);
-            Err(LambdaError::InvalidRequest { reason: "Container not found".to_string() })
+            Err(LambdaError::InvalidRequest {
+                reason: "Container not found".to_string(),
+            })
         }
     }
 
     #[instrument(skip(self))]
-    pub async fn cleanup_idle_containers(&self, soft_idle: Duration, hard_idle: Duration) -> Vec<String> {
+    pub async fn cleanup_idle_containers(
+        &self,
+        soft_idle: Duration,
+        hard_idle: Duration,
+    ) -> Vec<String> {
         let now = Instant::now();
         let mut to_remove = Vec::new();
         let mut to_stop = Vec::new();
-        
+
         // First pass: identify containers to remove (without holding lock during removal)
         {
             let containers = self.containers.lock().await;
             for (key, container_list) in containers.iter() {
                 for container in container_list.iter() {
                     let idle_time = now.duration_since(container.last_used);
-                    
+
                     if idle_time >= hard_idle {
                         to_remove.push((key.clone(), container.container_id.clone()));
                     } else if idle_time >= soft_idle && container.state == InstanceState::WarmIdle {
@@ -185,16 +206,23 @@ impl WarmPool {
                 }
             }
         }
-        
+
         // Second pass: remove hard idle containers (lock is released between iterations)
         for (key, container_id) in &to_remove {
             if let Err(e) = self.remove_container(key, container_id).await {
                 error!("Failed to remove idle container {}: {}", container_id, e);
             }
         }
-        
-        info!("Cleaned up {} idle containers, {} to stop", to_remove.len(), to_stop.len());
-        to_remove.into_iter().map(|(_, container_id)| container_id).collect()
+
+        info!(
+            "Cleaned up {} idle containers, {} to stop",
+            to_remove.len(),
+            to_stop.len()
+        );
+        to_remove
+            .into_iter()
+            .map(|(_, container_id)| container_id)
+            .collect()
     }
 
     /// Get the number of warm containers for a specific function
@@ -202,7 +230,7 @@ impl WarmPool {
         let containers = self.containers.lock().await;
         containers.get(key).map(|list| list.len()).unwrap_or(0)
     }
-    
+
     /// Get total number of warm containers across all functions
     pub async fn total_container_count(&self) -> usize {
         let containers = self.containers.lock().await;
@@ -238,17 +266,32 @@ impl WarmPool {
     /// Count containers in a specific state for a key
     pub async fn count_state(&self, key: &FnKey, state: InstanceState) -> usize {
         let containers = self.containers.lock().await;
-        containers.get(key).map(|list| list.iter().filter(|c| c.state == state).count()).unwrap_or(0)
+        containers
+            .get(key)
+            .map(|list| list.iter().filter(|c| c.state == state).count())
+            .unwrap_or(0)
     }
 
     /// List stopped container IDs for a key
     pub async fn list_stopped(&self, key: &FnKey) -> Vec<String> {
         let containers = self.containers.lock().await;
-        containers.get(key).map(|list| list.iter().filter(|c| c.state == InstanceState::Stopped).map(|c| c.container_id.clone()).collect()).unwrap_or_default()
+        containers
+            .get(key)
+            .map(|list| {
+                list.iter()
+                    .filter(|c| c.state == InstanceState::Stopped)
+                    .map(|c| c.container_id.clone())
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// Set container state by container_id across all keys.
-    pub async fn set_state_by_container_id(&self, container_id: &str, state: InstanceState) -> bool {
+    pub async fn set_state_by_container_id(
+        &self,
+        container_id: &str,
+        state: InstanceState,
+    ) -> bool {
         let mut containers = self.containers.lock().await;
         let keys: Vec<FnKey> = containers.keys().cloned().collect();
         for key in keys {
@@ -361,7 +404,9 @@ impl WarmPool {
         let mut stopped = 0usize;
         let mut entries = Vec::new();
         for (key, list) in containers.iter() {
-            if key.function_name != function_name { continue; }
+            if key.function_name != function_name {
+                continue;
+            }
             for c in list.iter() {
                 match c.state {
                     InstanceState::WarmIdle => warm_idle += 1,
@@ -376,7 +421,13 @@ impl WarmPool {
                 });
             }
         }
-        WarmPoolSummary { total: warm_idle+active+stopped, warm_idle, active, stopped, entries }
+        WarmPoolSummary {
+            total: warm_idle + active + stopped,
+            warm_idle,
+            active,
+            stopped,
+            entries,
+        }
     }
 }
 

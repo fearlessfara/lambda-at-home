@@ -1,8 +1,13 @@
 use lambda_models::Function;
 
 pub fn dockerfile(function: &Function) -> String {
-    let tag = if function.runtime == "nodejs22.x" { "22" } else { "18" };
-    format!(r#"
+    let tag = if function.runtime == "nodejs22.x" {
+        "22"
+    } else {
+        "18"
+    };
+    format!(
+        r#"
 FROM node:{tag}-alpine
 ENV NODE_ENV=production
 
@@ -48,6 +53,7 @@ ENTRYPOINT ["/var/runtime/bootstrap.sh"]
 
 # Set user
 USER 1000:1000
-"#, tag = tag)
+"#,
+        tag = tag
+    )
 }
-

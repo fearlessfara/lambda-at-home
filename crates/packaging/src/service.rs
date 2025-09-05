@@ -1,6 +1,6 @@
+use crate::{ImageBuilder, PackagingCache, ZipHandler};
+use lambda_models::{Config, Function, LambdaError};
 use std::path::PathBuf;
-use lambda_models::{Function, LambdaError, Config};
-use crate::{ZipHandler, ImageBuilder, PackagingCache};
 
 pub struct PackagingService {
     zip_handler: ZipHandler,
@@ -16,7 +16,7 @@ impl PackagingService {
             // Create a default cache if the directory doesn't exist
             PackagingCache::new(PathBuf::from("./data")).unwrap()
         });
-        
+
         Self {
             zip_handler,
             image_builder,
@@ -28,22 +28,29 @@ impl PackagingService {
         self.zip_handler.process_zip(zip_data).await
     }
 
-    pub async fn build_image(&mut self, function: &Function, image_ref: &str) -> Result<(), LambdaError> {
+    pub async fn build_image(
+        &mut self,
+        function: &Function,
+        image_ref: &str,
+    ) -> Result<(), LambdaError> {
         // Get the ZIP data for this function
         let zip_data = self.cache.load_zip_file(&function.code_sha256)?;
         let zip_info = self.zip_handler.process_zip(&zip_data).await?;
-        
+
         // Check cache first
         if let Some(_cached_image) = self.cache.get_cached_image(function, &zip_info.sha256) {
             return Ok(());
         }
 
         // Build new image
-        self.image_builder.build_image(function, &zip_info, image_ref).await?;
-        
+        self.image_builder
+            .build_image(function, &zip_info, image_ref)
+            .await?;
+
         // Cache the result
-        self.cache.cache_image(function, &zip_info.sha256, image_ref.to_string());
-        
+        self.cache
+            .cache_image(function, &zip_info.sha256, image_ref.to_string());
+
         Ok(())
     }
 

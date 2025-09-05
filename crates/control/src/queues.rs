@@ -1,11 +1,11 @@
+use dashmap::DashMap;
 use std::collections::VecDeque;
 use std::sync::Arc;
-use dashmap::DashMap;
 use tokio::sync::Notify;
 
-use lambda_models::LambdaError;
 use crate::work_item::WorkItem;
-use tracing::{info, debug};
+use lambda_models::LambdaError;
+use tracing::{debug, info};
 
 use sha2::{Digest, Sha256};
 
@@ -20,7 +20,8 @@ pub struct FnKey {
 impl FnKey {
     pub fn from_work_item(w: &WorkItem) -> Self {
         // Stable hash of environment: serialize Option<HashMap<..>> deterministically
-        let env_value = serde_json::to_value(&w.function.environment).unwrap_or(serde_json::Value::Null);
+        let env_value =
+            serde_json::to_value(&w.function.environment).unwrap_or(serde_json::Value::Null);
         let stable_bytes = serde_json::to_vec(&env_value).unwrap_or_default();
         let mut hasher = Sha256::new();
         hasher.update(&stable_bytes);
@@ -29,7 +30,11 @@ impl FnKey {
         Self {
             function_name: w.function.function_name.clone(),
             runtime: w.function.runtime.clone(),
-            version: w.function.version.clone().unwrap_or_else(|| "LATEST".to_string()),
+            version: w
+                .function
+                .version
+                .clone()
+                .unwrap_or_else(|| "LATEST".to_string()),
             env_hash,
         }
     }
@@ -61,7 +66,7 @@ impl Queues {
             inner: Arc::new(DashMap::new()),
         }
     }
-    
+
     pub fn push(&self, work_item: WorkItem) -> Result<(), LambdaError> {
         let key = FnKey::from_work_item(&work_item);
         info!(
@@ -79,10 +84,13 @@ impl Queues {
         // Notify without holding the map guard to avoid lock contention
         notify.notify_one();
 
-        info!("Notified waiting containers for function: {}", key.function_name);
+        info!(
+            "Notified waiting containers for function: {}",
+            key.function_name
+        );
         Ok(())
     }
-    
+
     pub fn get_available_work(&self, key: &FnKey) -> Vec<WorkItem> {
         if let Some(entry) = self.inner.get(key) {
             entry.queue.iter().cloned().collect()
@@ -90,7 +98,7 @@ impl Queues {
             Vec::new()
         }
     }
-    
+
     pub async fn pop_or_wait(&self, key: &FnKey) -> Result<WorkItem, LambdaError> {
         debug!(
             "Container requesting work for function: {}",
@@ -101,7 +109,10 @@ impl Queues {
             // Fast path: try to dequeue if the per-fn queue exists and has items
             if let Some(mut entry) = self.inner.get_mut(key) {
                 if let Some(work_item) = entry.queue.pop_front() {
-                    debug!("Dequeued work item: {} for function: {}", work_item.request_id, key.function_name);
+                    debug!(
+                        "Dequeued work item: {} for function: {}",
+                        work_item.request_id, key.function_name
+                    );
                     return Ok(work_item);
                 }
 
@@ -115,7 +126,10 @@ impl Queues {
                 // Re-check after listener registration; if an item arrived in the gap, consume it
                 if let Some(mut entry2) = self.inner.get_mut(key) {
                     if let Some(work_item) = entry2.queue.pop_front() {
-                        debug!("Dequeued work item after re-check: {} for function: {}", work_item.request_id, key.function_name);
+                        debug!(
+                            "Dequeued work item after re-check: {} for function: {}",
+                            work_item.request_id, key.function_name
+                        );
                         return Ok(work_item);
                     }
                 }
@@ -136,8 +150,10 @@ impl Queues {
             // Re-check in case a push landed between creating/reading notify and registering
             if let Some(mut entry2) = self.inner.get_mut(key) {
                 if let Some(work_item) = entry2.queue.pop_front() {
-                    debug!("Dequeued work item after re-check (new-queue path): {} for function: {}",
-                          work_item.request_id, key.function_name);
+                    debug!(
+                        "Dequeued work item after re-check (new-queue path): {} for function: {}",
+                        work_item.request_id, key.function_name
+                    );
                     return Ok(work_item);
                 }
             }
@@ -145,22 +161,26 @@ impl Queues {
             notified.await;
         }
     }
-    
+
     pub fn queue_size(&self, key: &FnKey) -> usize {
-        self.inner.get(key).map(|per_fn| per_fn.queue.len()).unwrap_or(0)
+        self.inner
+            .get(key)
+            .map(|per_fn| per_fn.queue.len())
+            .unwrap_or(0)
     }
-    
+
     pub fn total_queued(&self) -> usize {
-        self.inner.iter()
-            .map(|entry| entry.queue.len())
-            .sum()
+        self.inner.iter().map(|entry| entry.queue.len()).sum()
     }
 
     /// Snapshot current per-key queue sizes (for autoscaling decisions)
     pub fn snapshot_sizes(&self) -> Vec<(FnKey, usize)> {
-        self.inner.iter().map(|entry| (entry.key().clone(), entry.queue.len())).collect()
+        self.inner
+            .iter()
+            .map(|entry| (entry.key().clone(), entry.queue.len()))
+            .collect()
     }
-    
+
     pub fn pop_work_item(&self, key: &FnKey) -> Option<WorkItem> {
         if let Some(mut entry) = self.inner.get_mut(key) {
             entry.queue.pop_front()

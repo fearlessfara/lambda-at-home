@@ -1,5 +1,5 @@
+use lambda_control::pending::{InvocationResult, Pending};
 use tokio::time::{timeout, Duration};
-use lambda_control::pending::{Pending, InvocationResult};
 
 #[tokio::test]
 async fn pending_delivers_once() {
@@ -9,7 +9,10 @@ async fn pending_delivers_once() {
 
     assert!(p.complete(&id, InvocationResult::ok(b"ok".to_vec())));
 
-    let res = timeout(Duration::from_millis(200), rx).await.unwrap().unwrap();
+    let res = timeout(Duration::from_millis(200), rx)
+        .await
+        .unwrap()
+        .unwrap();
     assert!(res.ok);
     assert_eq!(res.payload, b"ok".to_vec());
 

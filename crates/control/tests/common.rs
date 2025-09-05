@@ -1,9 +1,12 @@
-use lambda_control::work_item::{WorkItem, FunctionMeta};
 use lambda_control::queues::FnKey;
+use lambda_control::work_item::{FunctionMeta, WorkItem};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn now_ms() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64
 }
 
 pub fn sample_meta() -> FunctionMeta {
@@ -11,10 +14,14 @@ pub fn sample_meta() -> FunctionMeta {
         function_name: "hello".into(),
         runtime: "nodejs18.x".into(),
         version: None,
-        environment: Some([
-            ("A".to_string(), "1".to_string()),
-            ("B".to_string(), "2".to_string()),
-        ].into_iter().collect()),
+        environment: Some(
+            [
+                ("A".to_string(), "1".to_string()),
+                ("B".to_string(), "2".to_string()),
+            ]
+            .into_iter()
+            .collect(),
+        ),
         timeout_ms: 1500,
     }
 }

@@ -40,6 +40,6 @@ python /var/runtime/bootstrap.py
 
 ENTRYPOINT ["/var/runtime/bootstrap.sh"]
 USER 1000:1000
-"#.to_string()
+"#
+    .to_string()
 }
-

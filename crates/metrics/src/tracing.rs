@@ -1,5 +1,5 @@
-use tracing::{info, error, warn};
-use lambda_models::{Function, ExecutionStatus, ErrorType};
+use lambda_models::{ErrorType, ExecutionStatus, Function};
+use tracing::{error, info, warn};
 
 pub struct TracingService;
 
@@ -9,7 +9,7 @@ impl TracingService {
             .json()
             .with_timer(tracing_subscriber::fmt::time::UtcTime::rfc_3339())
             .init();
-        
+
         Ok(())
     }
 
@@ -117,11 +117,7 @@ impl TracingService {
         );
     }
 
-    pub fn log_container_stopped(
-        function_name: &str,
-        container_id: &str,
-        reason: &str,
-    ) {
+    pub fn log_container_stopped(function_name: &str, container_id: &str, reason: &str) {
         info!(
             function_name = %function_name,
             container_id = %container_id,
@@ -130,11 +126,7 @@ impl TracingService {
         );
     }
 
-    pub fn log_container_removed(
-        function_name: &str,
-        container_id: &str,
-        reason: &str,
-    ) {
+    pub fn log_container_removed(function_name: &str, container_id: &str, reason: &str) {
         info!(
             function_name = %function_name,
             container_id = %container_id,
@@ -160,11 +152,7 @@ impl TracingService {
         );
     }
 
-    pub fn log_throttle(
-        function_name: &str,
-        request_id: Option<&str>,
-        reason: &str,
-    ) {
+    pub fn log_throttle(function_name: &str, request_id: Option<&str>, reason: &str) {
         warn!(
             function_name = %function_name,
             request_id = %request_id.unwrap_or("none"),
@@ -173,10 +161,7 @@ impl TracingService {
         );
     }
 
-    pub fn log_idle_cleanup(
-        containers_stopped: usize,
-        containers_removed: usize,
-    ) {
+    pub fn log_idle_cleanup(containers_stopped: usize, containers_removed: usize) {
         info!(
             containers_stopped = containers_stopped,
             containers_removed = containers_removed,

@@ -1,5 +1,5 @@
-use prometheus::{Counter, Histogram, Registry, TextEncoder, Encoder, HistogramOpts};
 use lambda_models::LambdaError;
+use prometheus::{Counter, Encoder, Histogram, HistogramOpts, Registry, TextEncoder};
 
 pub struct PrometheusMetrics {
     registry: Registry,
@@ -14,51 +14,83 @@ pub struct PrometheusMetrics {
 impl PrometheusMetrics {
     pub fn new() -> Result<Self, LambdaError> {
         let registry = Registry::new();
-        
+
         let invocations_total = Counter::new(
             "lambda_invocations_total",
-            "Total number of Lambda invocations"
-        ).map_err(|e| LambdaError::InternalError { reason: e.to_string() })?;
-        
-        let errors_total = Counter::new(
-            "lambda_errors_total",
-            "Total number of Lambda errors"
-        ).map_err(|e| LambdaError::InternalError { reason: e.to_string() })?;
-        
-        let throttles_total = Counter::new(
-            "lambda_throttles_total",
-            "Total number of Lambda throttles"
-        ).map_err(|e| LambdaError::InternalError { reason: e.to_string() })?;
-        
+            "Total number of Lambda invocations",
+        )
+        .map_err(|e| LambdaError::InternalError {
+            reason: e.to_string(),
+        })?;
+
+        let errors_total = Counter::new("lambda_errors_total", "Total number of Lambda errors")
+            .map_err(|e| LambdaError::InternalError {
+                reason: e.to_string(),
+            })?;
+
+        let throttles_total =
+            Counter::new("lambda_throttles_total", "Total number of Lambda throttles").map_err(
+                |e| LambdaError::InternalError {
+                    reason: e.to_string(),
+                },
+            )?;
+
         let cold_starts_total = Counter::new(
             "lambda_cold_starts_total",
-            "Total number of Lambda cold starts"
-        ).map_err(|e| LambdaError::InternalError { reason: e.to_string() })?;
-        
+            "Total number of Lambda cold starts",
+        )
+        .map_err(|e| LambdaError::InternalError {
+            reason: e.to_string(),
+        })?;
+
         let duration_ms = Histogram::with_opts(HistogramOpts::new(
             "lambda_duration_ms",
-            "Lambda function execution duration in milliseconds"
-        )).map_err(|e| LambdaError::InternalError { reason: e.to_string() })?;
-        
+            "Lambda function execution duration in milliseconds",
+        ))
+        .map_err(|e| LambdaError::InternalError {
+            reason: e.to_string(),
+        })?;
+
         let init_duration_ms = Histogram::with_opts(HistogramOpts::new(
             "lambda_init_duration_ms",
-            "Lambda function initialization duration in milliseconds"
-        )).map_err(|e| LambdaError::InternalError { reason: e.to_string() })?;
-        
+            "Lambda function initialization duration in milliseconds",
+        ))
+        .map_err(|e| LambdaError::InternalError {
+            reason: e.to_string(),
+        })?;
+
         // Register metrics
-        registry.register(Box::new(invocations_total.clone()))
-            .map_err(|e| LambdaError::InternalError { reason: e.to_string() })?;
-        registry.register(Box::new(errors_total.clone()))
-            .map_err(|e| LambdaError::InternalError { reason: e.to_string() })?;
-        registry.register(Box::new(throttles_total.clone()))
-            .map_err(|e| LambdaError::InternalError { reason: e.to_string() })?;
-        registry.register(Box::new(cold_starts_total.clone()))
-            .map_err(|e| LambdaError::InternalError { reason: e.to_string() })?;
-        registry.register(Box::new(duration_ms.clone()))
-            .map_err(|e| LambdaError::InternalError { reason: e.to_string() })?;
-        registry.register(Box::new(init_duration_ms.clone()))
-            .map_err(|e| LambdaError::InternalError { reason: e.to_string() })?;
-        
+        registry
+            .register(Box::new(invocations_total.clone()))
+            .map_err(|e| LambdaError::InternalError {
+                reason: e.to_string(),
+            })?;
+        registry
+            .register(Box::new(errors_total.clone()))
+            .map_err(|e| LambdaError::InternalError {
+                reason: e.to_string(),
+            })?;
+        registry
+            .register(Box::new(throttles_total.clone()))
+            .map_err(|e| LambdaError::InternalError {
+                reason: e.to_string(),
+            })?;
+        registry
+            .register(Box::new(cold_starts_total.clone()))
+            .map_err(|e| LambdaError::InternalError {
+                reason: e.to_string(),
+            })?;
+        registry
+            .register(Box::new(duration_ms.clone()))
+            .map_err(|e| LambdaError::InternalError {
+                reason: e.to_string(),
+            })?;
+        registry
+            .register(Box::new(init_duration_ms.clone()))
+            .map_err(|e| LambdaError::InternalError {
+                reason: e.to_string(),
+            })?;
+
         Ok(Self {
             registry,
             invocations_total,
@@ -98,11 +130,15 @@ impl PrometheusMetrics {
         let metric_families = self.registry.gather();
         let encoder = TextEncoder::new();
         let mut buffer = Vec::new();
-        
-        encoder.encode(&metric_families, &mut buffer)
-            .map_err(|e| LambdaError::InternalError { reason: e.to_string() })?;
-        
-        String::from_utf8(buffer)
-            .map_err(|e| LambdaError::InternalError { reason: e.to_string() })
+
+        encoder
+            .encode(&metric_families, &mut buffer)
+            .map_err(|e| LambdaError::InternalError {
+                reason: e.to_string(),
+            })?;
+
+        String::from_utf8(buffer).map_err(|e| LambdaError::InternalError {
+            reason: e.to_string(),
+        })
     }
 }

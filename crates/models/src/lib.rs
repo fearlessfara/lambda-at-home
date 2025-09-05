@@ -1,14 +1,14 @@
 pub mod config;
+pub mod error;
 pub mod function;
 pub mod invoke;
-pub mod error;
 pub mod routes;
 pub mod secrets;
 
 pub use config::*;
+pub use error::*;
 pub use function::*;
 pub use invoke::*;
-pub use error::*;
 pub use routes::*;
 pub use secrets::*;
 
@@ -79,9 +79,18 @@ mod tests {
 
     #[test]
     fn test_invocation_type_from_str() {
-        assert_eq!("RequestResponse".parse::<InvocationType>().unwrap(), InvocationType::RequestResponse);
-        assert_eq!("Event".parse::<InvocationType>().unwrap(), InvocationType::Event);
-        assert_eq!("DryRun".parse::<InvocationType>().unwrap(), InvocationType::DryRun);
+        assert_eq!(
+            "RequestResponse".parse::<InvocationType>().unwrap(),
+            InvocationType::RequestResponse
+        );
+        assert_eq!(
+            "Event".parse::<InvocationType>().unwrap(),
+            InvocationType::Event
+        );
+        assert_eq!(
+            "DryRun".parse::<InvocationType>().unwrap(),
+            InvocationType::DryRun
+        );
         assert!("Invalid".parse::<InvocationType>().is_err());
     }
 

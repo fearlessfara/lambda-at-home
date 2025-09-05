@@ -17,13 +17,13 @@ pub struct HistogramData {
 /// Parse Prometheus metrics text format
 pub fn prom_parse(text: &str) -> Result<Metrics> {
     let mut metrics = Metrics::default();
-    
+
     for line in text.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        
+
         if let Some((name, value)) = parse_metric_line(line) {
             if name.ends_with("_total") || name.ends_with("_count") {
                 // Counter
@@ -45,7 +45,7 @@ pub fn prom_parse(text: &str) -> Result<Metrics> {
             }
         }
     }
-    
+
     Ok(metrics)
 }
 
@@ -89,11 +89,11 @@ lambda_duration_ms_bucket{le="+Inf"} 5
 lambda_duration_ms_sum 100.5
 lambda_duration_ms_count 5
 "#;
-        
+
         let metrics = prom_parse(text).unwrap();
         assert_eq!(metrics.counters.get("lambda_invocations_total"), Some(&5.0));
         assert_eq!(metrics.counters.get("lambda_duration_ms_count"), Some(&5.0));
-        
+
         let duration_hist = metrics.histograms.get("lambda_duration_ms").unwrap();
         assert_eq!(duration_hist.sum, 100.5);
         assert_eq!(duration_hist.buckets.get("0.005"), Some(&0.0));

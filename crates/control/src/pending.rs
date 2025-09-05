@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use dashmap::DashMap;
+use std::sync::Arc;
 use tokio::sync::oneshot;
 use tracing::{info, warn};
 
@@ -14,22 +14,22 @@ pub struct InvocationResult {
 
 impl InvocationResult {
     pub fn ok(payload: Vec<u8>) -> Self {
-        Self { 
-            ok: true, 
-            payload, 
-            log_tail_b64: None, 
-            executed_version: None, 
-            function_error: None 
+        Self {
+            ok: true,
+            payload,
+            log_tail_b64: None,
+            executed_version: None,
+            function_error: None,
         }
     }
-    
+
     pub fn err(kind: &str, payload: Vec<u8>) -> Self {
-        Self { 
-            ok: false, 
-            payload, 
-            log_tail_b64: None, 
-            executed_version: None, 
-            function_error: Some(kind.to_string()) 
+        Self {
+            ok: false,
+            payload,
+            log_tail_b64: None,
+            executed_version: None,
+            function_error: Some(kind.to_string()),
         }
     }
 }
@@ -45,7 +45,7 @@ impl Pending {
             inner: Arc::new(DashMap::new()),
         }
     }
-    
+
     /// Register a pending waiter for a request ID
     /// Returns the receiver that will be notified when the result is available
     pub fn register(&self, req_id: String) -> oneshot::Receiver<InvocationResult> {
@@ -54,7 +54,7 @@ impl Pending {
         info!("Registered pending waiter for request: {}", req_id);
         rx
     }
-    
+
     /// Complete a pending invocation with a result
     /// Returns true if the request was found and completed, false if not found (late/duplicate)
     pub fn complete(&self, req_id: &str, res: InvocationResult) -> bool {
@@ -67,7 +67,7 @@ impl Pending {
             false
         }
     }
-    
+
     /// Fail a pending invocation if it's still waiting
     /// Used for timeouts and other error conditions
     pub fn fail_if_waiting(&self, req_id: &str, kind: &str, body: Vec<u8>) -> bool {

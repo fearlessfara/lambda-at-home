@@ -1,21 +1,20 @@
 use anyhow::Result;
-use lambda_models::Config;
 use lambda_control::ControlPlane;
-use lambda_metrics::MetricsService;
+use lambda_control::IdleWatchdog;
 use lambda_invoker::Invoker;
+use lambda_metrics::MetricsService;
+use lambda_models::Config;
+use sqlx::SqlitePool;
+use std::fs;
+use std::path::Path;
 use std::sync::Arc;
 use tokio::signal;
 use tracing::{info, warn};
-use sqlx::SqlitePool;
-use lambda_control::IdleWatchdog;
-use std::path::Path;
-use std::fs;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize tracing
-    tracing_subscriber::fmt()
-        .init();
+    tracing_subscriber::fmt().init();
 
     info!("Starting Lambda@Home server");
 
@@ -44,10 +43,10 @@ async fn main() -> Result<()> {
 
     // Initialize metrics service
     let metrics = Arc::new(MetricsService::new()?);
-    
+
     // Initialize invoker
     let invoker = Arc::new(Invoker::new(config.clone()).await?);
-    
+
     // Initialize control plane
     let control_plane = Arc::new(ControlPlane::new(pool, invoker, config.clone()).await?);
 
@@ -89,13 +88,8 @@ async fn main() -> Result<()> {
         let metrics = metrics.clone();
         let bind = bind_addr.clone();
         tokio::spawn(async move {
-            if let Err(e) = lambda_api::start_server(
-                bind,
-                user_api_port,
-                control_plane,
-                metrics,
-            )
-            .await
+            if let Err(e) =
+                lambda_api::start_server(bind, user_api_port, control_plane, metrics).await
             {
                 warn!("User API server error: {}", e);
             }
@@ -107,12 +101,8 @@ async fn main() -> Result<()> {
         let control_plane = control_plane.clone();
         let bind = bind_addr.clone();
         tokio::spawn(async move {
-            if let Err(e) = lambda_runtime_api::start_server(
-                bind,
-                runtime_api_port,
-                control_plane,
-            )
-            .await
+            if let Err(e) =
+                lambda_runtime_api::start_server(bind, runtime_api_port, control_plane).await
             {
                 warn!("Runtime API server error: {}", e);
             }
@@ -121,10 +111,7 @@ async fn main() -> Result<()> {
 
     info!(
         "Lambda@Home server started successfully. User API: {}:{}, Runtime API: {}:{}",
-        bind_addr,
-        user_api_port,
-        bind_addr,
-        runtime_api_port
+        bind_addr, user_api_port, bind_addr, runtime_api_port
     );
 
     // Wait for shutdown signal
@@ -139,7 +126,7 @@ async fn main() -> Result<()> {
 
     // Graceful shutdown
     info!("Shutting down Lambda@Home server...");
-    
+
     // Cancel all tasks
     control_handle.abort();
     user_api_handle.abort();

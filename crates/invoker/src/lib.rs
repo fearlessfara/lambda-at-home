@@ -62,17 +62,23 @@ mod tests {
         let function = create_test_function();
         let mut env_vars = std::collections::HashMap::new();
         env_vars.insert("CUSTOM_VAR".to_string(), "custom_value".to_string());
-        
+
         let mut env = Vec::new();
         env.push("AWS_LAMBDA_RUNTIME_API=host.docker.internal:9001".to_string());
-        env.push(format!("AWS_LAMBDA_FUNCTION_NAME={}", function.function_name));
+        env.push(format!(
+            "AWS_LAMBDA_FUNCTION_NAME={}",
+            function.function_name
+        ));
         env.push(format!("AWS_LAMBDA_FUNCTION_VERSION={}", function.version));
-        env.push(format!("AWS_LAMBDA_FUNCTION_MEMORY_SIZE={}", function.memory_size));
-        
+        env.push(format!(
+            "AWS_LAMBDA_FUNCTION_MEMORY_SIZE={}",
+            function.memory_size
+        ));
+
         for (key, value) in env_vars {
             env.push(format!("{}={}", key, value));
         }
-        
+
         assert!(env.contains(&"AWS_LAMBDA_RUNTIME_API=host.docker.internal:9001".to_string()));
         assert!(env.contains(&"AWS_LAMBDA_FUNCTION_NAME=test-function".to_string()));
         assert!(env.contains(&"CUSTOM_VAR=custom_value".to_string()));

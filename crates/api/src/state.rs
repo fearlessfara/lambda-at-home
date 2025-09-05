@@ -1,9 +1,9 @@
-use std::sync::Arc;
-use lambda_models::Config;
 use lambda_control::ControlPlane;
 use lambda_invoker::Invoker;
-use lambda_packaging::PackagingService;
 use lambda_metrics::MetricsService;
+use lambda_models::Config;
+use lambda_packaging::PackagingService;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {

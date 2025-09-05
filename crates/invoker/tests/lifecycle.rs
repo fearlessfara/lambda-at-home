@@ -1,7 +1,7 @@
-use lambda_invoker::docker::{CreateSpec, DockerLike};
-use std::{sync::Arc};
-use tokio::sync::Mutex;
 use async_trait::async_trait;
+use lambda_invoker::docker::{CreateSpec, DockerLike};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 #[derive(Clone, Default)]
 pub struct FakeDocker {
@@ -14,9 +14,16 @@ pub struct FakeDocker {
 }
 
 impl FakeDocker {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
     pub async fn last_created(&self) -> CreateSpec {
-        self.created.lock().await.last().cloned().expect("no create")
+        self.created
+            .lock()
+            .await
+            .last()
+            .cloned()
+            .expect("no create")
     }
 }
 
@@ -34,12 +41,18 @@ impl DockerLike for FakeDocker {
         Ok(())
     }
     async fn stop(&self, container_id: &str, timeout_secs: u64) -> anyhow::Result<()> {
-        self.stopped.lock().await.push((container_id.to_string(), timeout_secs));
+        self.stopped
+            .lock()
+            .await
+            .push((container_id.to_string(), timeout_secs));
         *self.running.lock().await = false;
         Ok(())
     }
     async fn remove(&self, container_id: &str, force: bool) -> anyhow::Result<()> {
-        self.removed.lock().await.push((container_id.to_string(), force));
+        self.removed
+            .lock()
+            .await
+            .push((container_id.to_string(), force));
         Ok(())
     }
     async fn inspect_running(&self, _container_id: &str) -> anyhow::Result<bool> {

@@ -1,4 +1,4 @@
-mod security_env;
-mod lifecycle;
 mod fs_policy;
+mod lifecycle;
 mod network;
+mod security_env;

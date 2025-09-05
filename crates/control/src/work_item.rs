@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use lambda_models::{Function, InvokeRequest};
+use serde::{Deserialize, Serialize};
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -26,11 +26,11 @@ impl From<Function> for FunctionMeta {
 
 #[derive(Clone, Debug)]
 pub struct WorkItem {
-    pub request_id: String,         // opaque string (UUID v4)
-    pub function: FunctionMeta,     // used to derive FnKey
+    pub request_id: String,     // opaque string (UUID v4)
+    pub function: FunctionMeta, // used to derive FnKey
     pub payload: Vec<u8>,
-    pub deadline_ms: i64,           // wall clock deadline used by RIC
-    pub log_type: Option<String>,   // "Tail" | "None"
+    pub deadline_ms: i64,         // wall clock deadline used by RIC
+    pub log_type: Option<String>, // "Tail" | "None"
     pub client_context: Option<String>,
     pub cognito_identity: Option<String>,
 }
@@ -42,15 +42,15 @@ impl WorkItem {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis() as i64;
-        
+
         let deadline_ms = now_ms + (function.timeout * 1000) as i64;
-        
+
         let payload = if let Some(payload) = request.payload {
             serde_json::to_vec(&payload).unwrap_or_default()
         } else {
             Vec::new()
         };
-        
+
         Self {
             request_id: req_id,
             function: FunctionMeta::from(function),

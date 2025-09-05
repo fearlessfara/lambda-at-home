@@ -1,10 +1,13 @@
-use tokio::time::{sleep, timeout, Duration};
-use lambda_control::queues::{Queues, FnKey};
-use lambda_control::work_item::{WorkItem, FunctionMeta};
+use lambda_control::queues::{FnKey, Queues};
+use lambda_control::work_item::{FunctionMeta, WorkItem};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::time::{sleep, timeout, Duration};
 
 fn now_ms() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64
 }
 
 fn sample_meta() -> FunctionMeta {
@@ -12,10 +15,14 @@ fn sample_meta() -> FunctionMeta {
         function_name: "hello".into(),
         runtime: "nodejs18.x".into(),
         version: None,
-        environment: Some([
-            ("A".to_string(), "1".to_string()),
-            ("B".to_string(), "2".to_string()),
-        ].into_iter().collect()),
+        environment: Some(
+            [
+                ("A".to_string(), "1".to_string()),
+                ("B".to_string(), "2".to_string()),
+            ]
+            .into_iter()
+            .collect(),
+        ),
         timeout_ms: 1500,
     }
 }
@@ -45,9 +52,10 @@ async fn pop_blocks_then_returns_when_pushed() {
     // Start waiter
     let qs_c = qs.clone();
     let key_c = key.clone();
-    let waiter = tokio::spawn(async move {
-        timeout(Duration::from_secs(2), qs_c.pop_or_wait(&key_c)).await
-    });
+    let waiter =
+        tokio::spawn(
+            async move { timeout(Duration::from_secs(2), qs_c.pop_or_wait(&key_c)).await },
+        );
 
     // Give it time to park
     sleep(Duration::from_millis(50)).await;
@@ -68,9 +76,18 @@ async fn fifo_order_is_preserved() {
     qs.push(wi("r2")).unwrap();
     qs.push(wi("r3")).unwrap();
 
-    let a = timeout(Duration::from_millis(200), qs.pop_or_wait(&key)).await.unwrap().unwrap();
-    let b = timeout(Duration::from_millis(200), qs.pop_or_wait(&key)).await.unwrap().unwrap();
-    let c = timeout(Duration::from_millis(200), qs.pop_or_wait(&key)).await.unwrap().unwrap();
+    let a = timeout(Duration::from_millis(200), qs.pop_or_wait(&key))
+        .await
+        .unwrap()
+        .unwrap();
+    let b = timeout(Duration::from_millis(200), qs.pop_or_wait(&key))
+        .await
+        .unwrap()
+        .unwrap();
+    let c = timeout(Duration::from_millis(200), qs.pop_or_wait(&key))
+        .await
+        .unwrap()
+        .unwrap();
 
     assert_eq!(a.request_id, "r1");
     assert_eq!(b.request_id, "r2");
@@ -85,8 +102,11 @@ async fn lost_wakeup_is_avoided() {
     // Spawn several waiters before any push
     let mut tasks = Vec::new();
     for _ in 0..3 {
-        let qs_c = qs.clone(); let k = key.clone();
-        tasks.push(tokio::spawn(async move { qs_c.pop_or_wait(&k).await.unwrap().request_id }));
+        let qs_c = qs.clone();
+        let k = key.clone();
+        tasks.push(tokio::spawn(async move {
+            qs_c.pop_or_wait(&k).await.unwrap().request_id
+        }));
     }
 
     sleep(Duration::from_millis(50)).await;
@@ -96,8 +116,11 @@ async fn lost_wakeup_is_avoided() {
     qs.push(wi("b")).unwrap();
     qs.push(wi("c")).unwrap();
 
-    let mut ids: Vec<String> = futures::future::join_all(tasks).await
-        .into_iter().map(|r| r.unwrap()).collect();
+    let mut ids: Vec<String> = futures::future::join_all(tasks)
+        .await
+        .into_iter()
+        .map(|r| r.unwrap())
+        .collect();
     ids.sort();
-    assert_eq!(ids, vec!["a","b","c"]);
+    assert_eq!(ids, vec!["a", "b", "c"]);
 }

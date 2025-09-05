@@ -1,7 +1,8 @@
 use lambda_models::Function;
 
 pub fn dockerfile(function: &Function) -> String {
-    format!(r#"
+    format!(
+        r#"
 FROM rust:1.75-alpine as builder
 
 # Install build dependencies
@@ -49,5 +50,7 @@ export LAMBDA_RUNTIME_DIR=/var/runtime
 
 ENTRYPOINT ["/var/runtime/bootstrap.sh"]
 USER 1000:1000
-"#, bin = function.function_name)
+"#,
+        bin = function.function_name
+    )
 }

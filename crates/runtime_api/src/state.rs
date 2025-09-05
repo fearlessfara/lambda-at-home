@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use lambda_control::{pending::Pending, queues::Queues, ControlPlane};
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct RtState {

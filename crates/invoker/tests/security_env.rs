@@ -1,7 +1,7 @@
-use lambda_invoker::docker::{CreateSpec, DockerLike};
-use std::{sync::Arc};
-use tokio::sync::Mutex;
 use async_trait::async_trait;
+use lambda_invoker::docker::{CreateSpec, DockerLike};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 #[derive(Clone, Default)]
 pub struct FakeDocker {
@@ -14,9 +14,16 @@ pub struct FakeDocker {
 }
 
 impl FakeDocker {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
     pub async fn last_created(&self) -> CreateSpec {
-        self.created.lock().await.last().cloned().expect("no create")
+        self.created
+            .lock()
+            .await
+            .last()
+            .cloned()
+            .expect("no create")
     }
 }
 
@@ -34,12 +41,18 @@ impl DockerLike for FakeDocker {
         Ok(())
     }
     async fn stop(&self, container_id: &str, timeout_secs: u64) -> anyhow::Result<()> {
-        self.stopped.lock().await.push((container_id.to_string(), timeout_secs));
+        self.stopped
+            .lock()
+            .await
+            .push((container_id.to_string(), timeout_secs));
         *self.running.lock().await = false;
         Ok(())
     }
     async fn remove(&self, container_id: &str, force: bool) -> anyhow::Result<()> {
-        self.removed.lock().await.push((container_id.to_string(), force));
+        self.removed
+            .lock()
+            .await
+            .push((container_id.to_string(), force));
         Ok(())
     }
     async fn inspect_running(&self, _container_id: &str) -> anyhow::Result<bool> {
@@ -58,7 +71,10 @@ async fn create_sets_security_hardening_and_runtime_env() {
         name: "fn-hello-eh123".into(),
         env: vec![
             ("AWS_LAMBDA_FUNCTION_NAME".into(), "hello".into()),
-            ("AWS_LAMBDA_RUNTIME_API".into(), "host.docker.internal:9001".into()),
+            (
+                "AWS_LAMBDA_RUNTIME_API".into(),
+                "host.docker.internal:9001".into(),
+            ),
         ],
         extra_hosts: vec!["host.docker.internal:host-gateway".into()],
         read_only_root_fs: true,
@@ -69,9 +85,7 @@ async fn create_sets_security_hardening_and_runtime_env() {
             // allow tmp as writable
             ("/tmp".into(), "/tmp".into(), false),
         ],
-        ulimits: vec![
-            ("nofile".into(), 1024),
-        ],
+        ulimits: vec![("nofile".into(), 1024)],
         labels: vec![("lambda@home.fn".into(), "hello".into())],
         network: None,
     };
@@ -92,11 +106,27 @@ async fn create_sets_security_hardening_and_runtime_env() {
     assert!(created.mounts.iter().any(|m| m.1 == "/tmp" && m.2 == false));
 
     // Env & host reachability
-    let env = created.env.iter().cloned().collect::<std::collections::HashMap<_,_>>();
-    assert_eq!(env.get("AWS_LAMBDA_FUNCTION_NAME").map(|s| s.as_str()), Some("hello"));
-    assert_eq!(env.get("AWS_LAMBDA_RUNTIME_API").map(|s| s.as_str()), Some("host.docker.internal:9001"));
-    assert!(created.extra_hosts.iter().any(|h| h == "host.docker.internal:host-gateway"));
+    let env = created
+        .env
+        .iter()
+        .cloned()
+        .collect::<std::collections::HashMap<_, _>>();
+    assert_eq!(
+        env.get("AWS_LAMBDA_FUNCTION_NAME").map(|s| s.as_str()),
+        Some("hello")
+    );
+    assert_eq!(
+        env.get("AWS_LAMBDA_RUNTIME_API").map(|s| s.as_str()),
+        Some("host.docker.internal:9001")
+    );
+    assert!(created
+        .extra_hosts
+        .iter()
+        .any(|h| h == "host.docker.internal:host-gateway"));
 
     // Labels
-    assert!(created.labels.iter().any(|(k,v)| k == "lambda@home.fn" && v == "hello"));
+    assert!(created
+        .labels
+        .iter()
+        .any(|(k, v)| k == "lambda@home.fn" && v == "hello"));
 }

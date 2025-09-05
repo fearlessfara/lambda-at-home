@@ -3,7 +3,7 @@ use lambda_models::Config;
 use std::process::Stdio;
 use std::time::Duration;
 use tempfile::TempDir;
-use tokio::process::{Command, Child};
+use tokio::process::{Child, Command};
 use tokio::time::sleep;
 
 #[derive(Debug)]
@@ -34,7 +34,7 @@ pub async fn spawn_daemon(config_override: Option<ConfigOverride>) -> Result<Tes
     // Create temporary data directory
     let data_dir = tempfile::tempdir()?;
     let data_path = data_dir.path().to_string_lossy();
-    
+
     // Create config file with overrides
     let mut config = Config::default();
     if let Some(override_config) = config_override {
@@ -54,33 +54,48 @@ pub async fn spawn_daemon(config_override: Option<ConfigOverride>) -> Result<Tes
             config.server.port_runtime_api = port;
         }
     }
-    
+
     // Override data directory
     config.data.dir = data_path.to_string();
     config.data.db_url = format!("sqlite://{}/lhome.db", data_path);
-    
+
     // Start the daemon with environment variables
     let mut cmd = Command::new("cargo");
     cmd.args(&["run", "--bin", "lambda-at-home-server"]);
     cmd.env("LAMBDA_DATA_DIR", data_path.as_ref());
     cmd.env("LAMBDA_DB_URL", &config.data.db_url);
-    cmd.env("LAMBDA_USER_API_PORT", config.server.port_user_api.to_string());
-    cmd.env("LAMBDA_RUNTIME_API_PORT", config.server.port_runtime_api.to_string());
+    cmd.env(
+        "LAMBDA_USER_API_PORT",
+        config.server.port_user_api.to_string(),
+    );
+    cmd.env(
+        "LAMBDA_RUNTIME_API_PORT",
+        config.server.port_runtime_api.to_string(),
+    );
     cmd.env("LAMBDA_IDLE_SOFT_MS", config.idle.soft_ms.to_string());
     cmd.env("LAMBDA_IDLE_HARD_MS", config.idle.hard_ms.to_string());
-    cmd.env("LAMBDA_MAX_GLOBAL_CONCURRENCY", config.limits.max_global_concurrency.to_string());
+    cmd.env(
+        "LAMBDA_MAX_GLOBAL_CONCURRENCY",
+        config.limits.max_global_concurrency.to_string(),
+    );
     cmd.current_dir(std::env::current_dir()?);
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
-    
+
     let process = cmd.spawn()?;
-    
+
     // Wait for daemon to start
     sleep(Duration::from_secs(3)).await;
-    
-    let user_api_url = format!("http://{}:{}", config.server.bind, config.server.port_user_api);
-    let runtime_api_url = format!("http://{}:{}", config.server.bind, config.server.port_runtime_api);
-    
+
+    let user_api_url = format!(
+        "http://{}:{}",
+        config.server.bind, config.server.port_user_api
+    );
+    let runtime_api_url = format!(
+        "http://{}:{}",
+        config.server.bind, config.server.port_runtime_api
+    );
+
     Ok(TestDaemon {
         user_api_url,
         runtime_api_url,

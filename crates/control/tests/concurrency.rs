@@ -20,6 +20,10 @@ async fn raii_permit_released_on_drop() {
 
     drop(_g1);
     // Now it should complete
-    let guard = timeout(Duration::from_secs(1), waiter).await.unwrap().unwrap().unwrap();
+    let guard = timeout(Duration::from_secs(1), waiter)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
     drop(guard);
 }

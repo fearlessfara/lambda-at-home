@@ -1,8 +1,5 @@
 use tower::ServiceBuilder;
-use tower_http::{
-    cors::CorsLayer,
-    trace::TraceLayer,
-};
+use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 pub fn create_middleware_stack() -> impl tower::Layer<axum::Router> {
     ServiceBuilder::new()

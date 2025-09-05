@@ -1,11 +1,14 @@
-use lambda_control::queues::{Queues, FnKey};
-use lambda_control::scheduler::{Scheduler, run_dispatcher};
-use lambda_control::work_item::{WorkItem, FunctionMeta};
+use lambda_control::queues::{FnKey, Queues};
+use lambda_control::scheduler::{run_dispatcher, Scheduler};
+use lambda_control::work_item::{FunctionMeta, WorkItem};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{timeout, Duration};
 
 fn now_ms() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64
 }
 
 fn sample_meta() -> FunctionMeta {
@@ -13,10 +16,14 @@ fn sample_meta() -> FunctionMeta {
         function_name: "hello".into(),
         runtime: "nodejs18.x".into(),
         version: None,
-        environment: Some([
-            ("A".to_string(), "1".to_string()),
-            ("B".to_string(), "2".to_string()),
-        ].into_iter().collect()),
+        environment: Some(
+            [
+                ("A".to_string(), "1".to_string()),
+                ("B".to_string(), "2".to_string()),
+            ]
+            .into_iter()
+            .collect(),
+        ),
         timeout_ms: 1500,
     }
 }
@@ -52,8 +59,14 @@ async fn dispatcher_fans_out_to_queues() {
 
     // Pop from per-fn queue
     let key = fn_key_from_meta();
-    let a = timeout(Duration::from_millis(200), qs.pop_or_wait(&key)).await.unwrap().unwrap();
-    let b = timeout(Duration::from_millis(200), qs.pop_or_wait(&key)).await.unwrap().unwrap();
+    let a = timeout(Duration::from_millis(200), qs.pop_or_wait(&key))
+        .await
+        .unwrap()
+        .unwrap();
+    let b = timeout(Duration::from_millis(200), qs.pop_or_wait(&key))
+        .await
+        .unwrap()
+        .unwrap();
 
     assert_eq!(a.request_id, "S1");
     assert_eq!(b.request_id, "S2");
