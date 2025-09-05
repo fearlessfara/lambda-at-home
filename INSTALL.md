@@ -16,39 +16,49 @@ Before installing Lambda@Home, make sure you have the following installed:
 
 ## Quick Setup
 
-### Option 1: Using the Setup Script (Recommended)
+### Option 1: Download and Install Binary (Recommended for End Users)
 
-1. Clone or download the Lambda@Home repository
+1. Download and run the install script:
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/fearlessfara/lambda-at-home/main/install-lambda-at-home.sh | bash
+   ```
+   
+   Or download manually and run:
+   ```bash
+   wget https://raw.githubusercontent.com/fearlessfara/lambda-at-home/main/install-lambda-at-home.sh
+   chmod +x install-lambda-at-home.sh
+   ./install-lambda-at-home.sh
+   ```
+
+2. Start Lambda@Home:
+   ```bash
+   lambda-at-home-server
+   ```
+
+### Option 2: Build from Source (For Developers)
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/fearlessfara/lambda-at-home.git
+   cd lambda-at-home
+   ```
+
 2. Run the setup script:
    ```bash
    ./setup.sh
    ```
+
 3. Build the project:
    ```bash
-   cargo build --release
+   make release
    ```
+
 4. Run Lambda@Home:
    ```bash
-   cargo run
+   ./target/release/lambda-at-home-server
    ```
 
-### Option 2: Using the Full Install Script
-
-1. Clone or download the Lambda@Home repository
-2. Run the install script:
-   ```bash
-   ./install.sh
-   ```
-3. Build the project:
-   ```bash
-   cargo build --release
-   ```
-4. Run Lambda@Home:
-   ```bash
-   cargo run
-   ```
-
-### Option 3: Manual Setup
+### Option 3: Manual Setup (For Developers)
 
 If you prefer to set up manually:
 
@@ -86,8 +96,8 @@ If you prefer to set up manually:
 
 3. Build and run:
    ```bash
-   cargo build --release
-   cargo run
+   make release
+   ./target/release/lambda-at-home-server
    ```
 
 ## Verification

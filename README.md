@@ -44,34 +44,53 @@ Lambda@Home consists of several components:
 
 ### Installation
 
+#### For End Users (Recommended)
+
+Download and install the latest binary:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/fearlessfara/lambda-at-home/main/install-lambda-at-home.sh | bash
+```
+
+#### For Developers
+
 1) Clone the repository
 ```bash
 git clone https://github.com/fearlessfara/lambda-at-home.git
-cd lambda@home
+cd lambda-at-home
 ```
 
 2) Build the project
 ```bash
-make build
+make release
 ```
 
 ### Running the Server
 
-Start the Lambda@Home server:
+#### For End Users
+```bash
+lambda-at-home-server
+```
+
+#### For Developers
 ```bash
 make run
+# or
+./target/release/lambda-at-home-server
 ```
 
 The server will start on:
 - User API: http://127.0.0.1:9000/api
+- Web Console: http://127.0.0.1:9000 (embedded in binary)
 - Runtime API: http://127.0.0.1:9001
 - Health: http://127.0.0.1:9000/api/healthz
 - Metrics: http://127.0.0.1:9000/api/metrics
 
-### Web Console (dev mode, optional)
+### Web Console
 
-Run the Console for easier management and testing:
+The web console is embedded in the binary and available at http://127.0.0.1:9000. No separate setup required!
 
+For development, you can run the console separately:
 ```bash
 cd console
 npm install
