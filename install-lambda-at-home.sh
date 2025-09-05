@@ -43,9 +43,9 @@ command_exists() {
 # Function to get the latest release version
 get_latest_version() {
     if command_exists curl; then
-        curl -s https://api.github.com/repos/fearlessfara/lambda-at-home/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/'
+        curl -s https://api.github.com/repos/fearlessfara/lambda-home/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/'
     elif command_exists wget; then
-        wget -qO- https://api.github.com/repos/fearlessfara/lambda-at-home/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/'
+        wget -qO- https://api.github.com/repos/fearlessfara/lambda-home/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/'
     else
         print_error "curl or wget is required to download the binary"
         exit 1
@@ -78,7 +78,7 @@ download_binary() {
     local version=$1
     local platform=$2
     local binary_name="lambda-at-home-server"
-    local download_url="https://github.com/fearlessfara/lambda-at-home/releases/download/${version}/lambda-at-home-server-${version}-${platform}"
+    local download_url="https://github.com/fearlessfara/lambda-home/releases/download/${version}/lambda-at-home-server-${version}-${platform}"
     
     # Add .exe extension for Windows
     if [[ "$platform" == *"windows"* ]]; then
@@ -105,7 +105,7 @@ download_binary() {
     if [[ "$download_success" == false ]] && [[ "$platform" == *"arm64"* ]]; then
         print_warning "ARM64 binary not available, trying x86_64 fallback..."
         local fallback_platform="${platform/arm64/x86_64}"
-        local fallback_url="https://github.com/fearlessfara/lambda-at-home/releases/download/${version}/lambda-at-home-server-${version}-${fallback_platform}"
+        local fallback_url="https://github.com/fearlessfara/lambda-home/releases/download/${version}/lambda-at-home-server-${version}-${fallback_platform}"
         
         if [[ "$platform" == *"windows"* ]]; then
             fallback_url="${fallback_url}.exe"
@@ -142,7 +142,7 @@ download_binary() {
 verify_checksum() {
     local version=$1
     local platform=$2
-    local checksum_url="https://github.com/fearlessfara/lambda-at-home/releases/download/${version}/lambda-at-home-server-${version}-${platform}.sha256"
+    local checksum_url="https://github.com/fearlessfara/lambda-home/releases/download/${version}/lambda-at-home-server-${version}-${platform}.sha256"
     
     # Add .exe extension for Windows
     if [[ "$platform" == *"windows"* ]]; then

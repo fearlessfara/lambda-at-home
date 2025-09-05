@@ -120,6 +120,9 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -203,7 +206,7 @@ jobs:
             Download and install the binary for your platform:
             
             ```bash
-            curl -fsSL https://raw.githubusercontent.com/fearlessfara/lambda-at-home/main/install-lambda-at-home.sh | bash
+            curl -fsSL https://raw.githubusercontent.com/fearlessfara/lambda-home/main/install-lambda-at-home.sh | bash
             ```
             
             ### Manual Installation
@@ -212,28 +215,28 @@ jobs:
             
             **Linux x86_64:**
             ```bash
-            wget https://github.com/fearlessfara/lambda-at-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-linux-x86_64
+            wget https://github.com/fearlessfara/lambda-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-linux-x86_64
             chmod +x lambda-at-home-server-${{ github.ref_name }}-linux-x86_64
             sudo mv lambda-at-home-server-${{ github.ref_name }}-linux-x86_64 /usr/local/bin/lambda-at-home-server
             ```
             
             **macOS x86_64 (Intel):**
             ```bash
-            curl -L -o lambda-at-home-server https://github.com/fearlessfara/lambda-at-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-macos-x86_64
+            curl -L -o lambda-at-home-server https://github.com/fearlessfara/lambda-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-macos-x86_64
             chmod +x lambda-at-home-server
             sudo mv lambda-at-home-server /usr/local/bin/
             ```
             
             **macOS ARM64 (Apple Silicon):**
             ```bash
-            curl -L -o lambda-at-home-server https://github.com/fearlessfara/lambda-at-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-macos-arm64
+            curl -L -o lambda-at-home-server https://github.com/fearlessfara/lambda-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-macos-arm64
             chmod +x lambda-at-home-server
             sudo mv lambda-at-home-server /usr/local/bin/
             ```
             
             **Windows x86_64:**
             ```powershell
-            Invoke-WebRequest -Uri "https://github.com/fearlessfara/lambda-at-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-windows-x86_64.exe" -OutFile "lambda-at-home-server.exe"
+            Invoke-WebRequest -Uri "https://github.com/fearlessfara/lambda-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-windows-x86_64.exe" -OutFile "lambda-at-home-server.exe"
             ```
             
             ### Available Binaries
