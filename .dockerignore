@@ -1,0 +1,14 @@
+# Docker build context hygiene
+.git
+.github
+target
+node_modules
+data
+*.log
+*.tmp
+*.swp
+*.DS_Store
+scripts/legacy
+tests
+crates/**/target
+**/.env

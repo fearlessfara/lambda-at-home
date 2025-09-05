@@ -1,4 +1,4 @@
-.PHONY: build test test-unit test-int fmt clippy clean run test-autoscaling test-service test-metrics
+.PHONY: build test test-unit test-int fmt clippy clean run test-autoscaling test-service test-metrics test-node-runtimes
 
 # Build the project
 build:
@@ -50,6 +50,10 @@ test-service:
 test-metrics:
 	./scripts/test-metrics.sh
 
+# Node runtime test (18.x and 22.x)
+test-node-runtimes:
+	./scripts/test-node-runtimes.sh
+
 # CI targets
 ci: fmt-check clippy test-unit
 
@@ -71,6 +75,7 @@ help:
 	@echo "  test-autoscaling - Run autoscaling burst + reuse smoke test"
 	@echo "  test-service - Run end-to-end service smoke test"
 	@echo "  test-metrics - Check /metrics endpoint"
+	@echo "  test-node-runtimes - Create & invoke functions with Node 18.x and 22.x"
 	@echo "  ci         - Run CI checks (format, clippy, unit tests)"
 	@echo "  ci-full    - Run full CI with integration tests"
 	@echo "  help       - Show this help"

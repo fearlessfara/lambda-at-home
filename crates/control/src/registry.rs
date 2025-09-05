@@ -20,7 +20,7 @@ use crate::concurrency::ConcurrencyManager;
 use crate::work_item::WorkItem;
 // No need for FnKey import - using function names directly
 use std::sync::Arc;
-use tracing::{info, error, instrument};
+use tracing::{info, error, debug, instrument};
 
 pub struct ControlPlane {
     pool: SqlitePool,
@@ -738,7 +738,7 @@ impl ControlPlane {
         // Runtime Long-Poll (GET /2018-06-01/runtime/invocation/next)
         // Goal: Container pulls work; this call blocks until work is available.
         
-        info!("Container polling for next invocation for function: {} runtime: {}", function_name, runtime);
+        debug!("Container polling for next invocation for function: {} runtime: {}", function_name, runtime);
         
         // 1) Pop or wait: lost-wakeup safe, keyed by fn+rt+ver+env
         let key = crate::queues::FnKey {
@@ -751,7 +751,7 @@ impl ControlPlane {
 
         // Active marking handled by runtime API using instance header
         
-        info!("Found work item: {} for function: {}", work_item.request_id, work_item.function.function_name);
+        debug!("Found work item: {} for function: {}", work_item.request_id, work_item.function.function_name);
         
         // 3) Return JSON in AWS Lambda Runtime API format
         Ok(RuntimeInvocation {
@@ -864,7 +864,7 @@ impl ControlPlane {
     }
 
     fn is_valid_runtime(&self, runtime: &str) -> bool {
-        matches!(runtime, "nodejs18.x" | "python3.11" | "rust")
+        matches!(runtime, "nodejs18.x" | "nodejs22.x" | "python3.11" | "rust")
     }
 
     async fn function_exists(&self, name: &str) -> Result<bool, LambdaError> {

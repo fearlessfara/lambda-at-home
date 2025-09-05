@@ -1,10 +1,12 @@
 pub mod zip_handler;
 pub mod image_builder;
+pub mod runtimes;
 pub mod cache;
 pub mod service;
 
 pub use zip_handler::*;
 pub use image_builder::*;
+pub use runtimes::*;
 pub use cache::*;
 pub use service::*;
 

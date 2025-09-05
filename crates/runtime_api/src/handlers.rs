@@ -6,7 +6,7 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::json;
-use tracing::{error, info, instrument};
+use tracing::{error, info, debug, instrument};
 use sha2::{Digest, Sha256};
 
 use crate::state::RtState;
@@ -47,7 +47,7 @@ pub async fn runtime_next(
 ) -> impl IntoResponse {
     let function_name = &q.function_name;
 
-    info!("Container requesting work for function: {}", function_name);
+    debug!("Container requesting work for function: {}", function_name);
 
     // Prefer control plane (shared queues). Fallback to local queues in tests.
     if let Some(control) = state.control.clone() {

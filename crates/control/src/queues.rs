@@ -5,7 +5,7 @@ use tokio::sync::Notify;
 
 use lambda_models::LambdaError;
 use crate::work_item::WorkItem;
-use tracing::info;
+use tracing::{info, debug};
 
 use sha2::{Digest, Sha256};
 
@@ -92,7 +92,7 @@ impl Queues {
     }
     
     pub async fn pop_or_wait(&self, key: &FnKey) -> Result<WorkItem, LambdaError> {
-        info!(
+        debug!(
             "Container requesting work for function: {}",
             key.function_name
         );
@@ -101,7 +101,7 @@ impl Queues {
             // Fast path: try to dequeue if the per-fn queue exists and has items
             if let Some(mut entry) = self.inner.get_mut(key) {
                 if let Some(work_item) = entry.queue.pop_front() {
-                    info!("Dequeued work item: {} for function: {}", work_item.request_id, key.function_name);
+                    debug!("Dequeued work item: {} for function: {}", work_item.request_id, key.function_name);
                     return Ok(work_item);
                 }
 
@@ -115,7 +115,7 @@ impl Queues {
                 // Re-check after listener registration; if an item arrived in the gap, consume it
                 if let Some(mut entry2) = self.inner.get_mut(key) {
                     if let Some(work_item) = entry2.queue.pop_front() {
-                        info!("Dequeued work item after re-check: {} for function: {}", work_item.request_id, key.function_name);
+                        debug!("Dequeued work item after re-check: {} for function: {}", work_item.request_id, key.function_name);
                         return Ok(work_item);
                     }
                 }
@@ -136,7 +136,7 @@ impl Queues {
             // Re-check in case a push landed between creating/reading notify and registering
             if let Some(mut entry2) = self.inner.get_mut(key) {
                 if let Some(work_item) = entry2.queue.pop_front() {
-                    info!("Dequeued work item after re-check (new-queue path): {} for function: {}",
+                    debug!("Dequeued work item after re-check (new-queue path): {} for function: {}",
                           work_item.request_id, key.function_name);
                     return Ok(work_item);
                 }
