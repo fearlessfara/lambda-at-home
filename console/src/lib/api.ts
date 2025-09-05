@@ -43,6 +43,19 @@ export const api = {
     const response = await fetch(`${API_BASE_URL}/2015-03-31/functions`);
     return handleResponse(response);
   },
+  // Secrets admin
+  async listSecrets(): Promise<{ secrets: { name: string; created_at: string }[] }> {
+    const res = await fetch(`${API_BASE_URL}/admin/secrets`);
+    return handleResponse(res);
+  },
+  async createSecret(data: { name: string; value: string }): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/admin/secrets`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    if (!res.ok) throw new ApiError(`HTTP ${res.status}`, res.status);
+  },
+  async deleteSecret(name: string): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/admin/secrets/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    if (!res.ok) throw new ApiError(`HTTP ${res.status}`, res.status);
+  },
 
   // API Gateway-style proxy invocation
   async invokeViaProxy(

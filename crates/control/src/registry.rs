@@ -342,6 +342,7 @@ impl ControlPlane {
         request: UpdateFunctionConfigurationRequest,
     ) -> Result<Function, LambdaError> {
         let mut function = self.get_function(name).await?;
+        let env_will_change = request.environment.is_some();
         
         if let Some(role) = request.role {
             function.role = Some(role);
@@ -383,6 +384,14 @@ impl ControlPlane {
         .execute(&self.pool)
         .await
         .map_err(|e| LambdaError::SqlxError(e))?;
+
+        // If env is updated, drain existing warm containers so new env applies immediately
+        if env_will_change {
+            let ids = self.warm_pool.drain_by_function_id(function.function_id).await;
+            for id in ids {
+                let _ = self.invoker.remove_container(&id).await;
+            }
+        }
 
         Ok(function)
     }
@@ -632,21 +641,48 @@ impl ControlPlane {
 
     #[instrument(skip(self))]
     pub async fn put_concurrency(&self, name: &str, config: ConcurrencyConfig) -> Result<(), LambdaError> {
-        // TODO: Implement concurrency configuration storage
+        let func = self.get_function(name).await?;
+        let now = chrono::Utc::now();
+        let reserved = config.reserved_concurrent_executions.map(|v| v as i64);
+        sqlx::query(
+            r#"INSERT INTO function_concurrency(function_id, reserved_concurrent_executions, updated_at)
+               VALUES(?, ?, ?)
+               ON CONFLICT(function_id) DO UPDATE SET reserved_concurrent_executions = excluded.reserved_concurrent_executions, updated_at = excluded.updated_at"#
+        )
+        .bind(&func.function_id)
+        .bind(reserved)
+        .bind(&now)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| LambdaError::SqlxError(e))?;
+        // Update in-memory limiter
+        self.concurrency_manager.set_reserved_limit(func.function_id, config.reserved_concurrent_executions);
         Ok(())
     }
 
     #[instrument(skip(self))]
     pub async fn get_concurrency(&self, name: &str) -> Result<ConcurrencyConfig, LambdaError> {
-        // TODO: Implement concurrency configuration retrieval
-        Ok(ConcurrencyConfig {
-            reserved_concurrent_executions: None,
-        })
+        let func = self.get_function(name).await?;
+        let reserved: Option<i64> = sqlx::query_scalar(
+            "SELECT reserved_concurrent_executions FROM function_concurrency WHERE function_id = ?"
+        )
+        .bind(&func.function_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| LambdaError::SqlxError(e))?
+        .flatten();
+        Ok(ConcurrencyConfig { reserved_concurrent_executions: reserved.map(|v| v as u32) })
     }
 
     #[instrument(skip(self))]
     pub async fn delete_concurrency(&self, name: &str) -> Result<(), LambdaError> {
-        // TODO: Implement concurrency configuration deletion
+        let func = self.get_function(name).await?;
+        let _ = sqlx::query("DELETE FROM function_concurrency WHERE function_id = ?")
+            .bind(&func.function_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| LambdaError::SqlxError(e))?;
+        self.concurrency_manager.set_reserved_limit(func.function_id, None);
         Ok(())
     }
 
@@ -685,7 +721,7 @@ impl ControlPlane {
             
             // Create container: generate instance id and inject as env
             let instance_id = uuid::Uuid::new_v4().to_string();
-            let mut env_vars = function.environment.clone();
+            let mut env_vars = self.resolve_env_vars(&function).await?;
             env_vars.insert("LAMBDAH_INSTANCE_ID".to_string(), instance_id.clone());
             let container_id = self.invoker.create_container(&function, &image_ref, env_vars).await?;
             self.invoker.start_container(&container_id).await?;
@@ -717,7 +753,7 @@ impl ControlPlane {
                 packaging_service.build_image(&function, &image_ref).await?;
 
                 let instance_id = uuid::Uuid::new_v4().to_string();
-                let mut env_vars = function.environment.clone();
+                let mut env_vars = self.resolve_env_vars(&function).await?;
                 env_vars.insert("LAMBDAH_INSTANCE_ID".to_string(), instance_id.clone());
                 let container_id = self.invoker.create_container(&function, &image_ref, env_vars).await?;
                 self.invoker.start_container(&container_id).await?;
@@ -1022,4 +1058,97 @@ fn normalize_path(p: &str) -> String {
     let mut s = if p.starts_with('/') { p.to_string() } else { format!("/{}", p) };
     if s.len() > 1 && s.ends_with('/') { s.pop(); }
     s
+}
+
+impl ControlPlane {
+    // Resolve environment variables, replacing secret references with actual values.
+    // Secret reference format: "SECRET_REF:<name>"
+    pub async fn resolve_env_vars(&self, function: &Function) -> Result<HashMap<String,String>, LambdaError> {
+        let mut out = function.environment.clone();
+        // Only fetch secrets when needed to avoid extra queries
+        for (_k, v) in out.clone().iter() {
+            if let Some(name) = v.strip_prefix("SECRET_REF:") {
+                // Lookup secret value
+                if let Some(val) = self.get_secret_value(name).await? {
+                    out.insert(_k.clone(), val);
+                } else {
+                    // If missing, leave as-is (keeps reference) to help debugging
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    // Secrets management helpers
+    pub async fn create_secret(&self, name: &str, value: &str) -> Result<(), LambdaError> {
+        let now = chrono::Utc::now();
+        // Store base64-encoded; note: this is obfuscation, not strong encryption.
+        let encoded = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, value.as_bytes());
+        sqlx::query("INSERT OR REPLACE INTO secrets(name, value, created_at) VALUES(?, ?, ?)")
+            .bind(name)
+            .bind(encoded)
+            .bind(&now)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| LambdaError::SqlxError(e))?;
+        // Drain any functions referencing this secret so next invokes pick up the new value
+        self.drain_functions_referencing_secret(name).await?;
+        Ok(())
+    }
+
+    pub async fn list_secrets(&self) -> Result<Vec<(String, chrono::DateTime<chrono::Utc>)>, LambdaError> {
+        let rows = sqlx::query("SELECT name, created_at FROM secrets ORDER BY name")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| LambdaError::SqlxError(e))?;
+        let mut v = Vec::with_capacity(rows.len());
+        for r in rows.iter() {
+            let name: String = r.try_get("name").map_err(|e| LambdaError::SqlxError(e))?;
+            let created: chrono::DateTime<chrono::Utc> = r.try_get("created_at").map_err(|e| LambdaError::SqlxError(e))?;
+            v.push((name, created));
+        }
+        Ok(v)
+    }
+
+    pub async fn delete_secret(&self, name: &str) -> Result<(), LambdaError> {
+        let _ = sqlx::query("DELETE FROM secrets WHERE name = ?")
+            .bind(name)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| LambdaError::SqlxError(e))?;
+        // Drain any functions referencing this secret so next invokes fail/reflect missing secret
+        self.drain_functions_referencing_secret(name).await?;
+        Ok(())
+    }
+
+    pub async fn get_secret_value(&self, name: &str) -> Result<Option<String>, LambdaError> {
+        let val: Option<String> = sqlx::query_scalar("SELECT value FROM secrets WHERE name = ?")
+            .bind(name)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| LambdaError::SqlxError(e))?;
+        if let Some(enc) = val {
+            if let Ok(bytes) = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, enc) {
+                if let Ok(s) = String::from_utf8(bytes) { return Ok(Some(s)); }
+            }
+            return Ok(None);
+        }
+        Ok(None)
+    }
+
+    async fn drain_functions_referencing_secret(&self, name: &str) -> Result<(), LambdaError> {
+        // Find functions whose environment JSON contains this secret reference
+        let pattern = format!("%SECRET_REF:{}%", name);
+        let rows = sqlx::query("SELECT function_id FROM functions WHERE environment LIKE ?")
+            .bind(&pattern)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| LambdaError::SqlxError(e))?;
+        for row in rows {
+            let fid: uuid::Uuid = row.try_get("function_id").map_err(|e| LambdaError::SqlxError(e))?;
+            let ids = self.warm_pool.drain_by_function_id(fid).await;
+            for id in ids { let _ = self.invoker.remove_container(&id).await; }
+        }
+        Ok(())
+    }
 }

@@ -4,6 +4,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { useUpdateFunctionConfiguration } from '../hooks/useFunctions';
+import { api } from '../lib/api';
 
 export function UpdateFunctionModal({
   open,
@@ -17,18 +18,27 @@ export function UpdateFunctionModal({
   initial: { handler: string; timeout: number; memory_size: number; environment: Record<string,string>; description?: string };
 }) {
   const [local, setLocal] = useState({ handler, timeout, memory_size, description: description || '' });
-  const [envRows, setEnvRows] = useState<{key:string;value:string}[]>([]);
+  const [envRows, setEnvRows] = useState<{key:string;value:string; isSecret?: boolean; secretName?: string}[]>([]);
+  const [secrets, setSecrets] = useState<string[]>([]);
   const updateFn = useUpdateFunctionConfiguration();
 
   useEffect(() => {
     setLocal({ handler, timeout, memory_size, description: description || '' });
-    setEnvRows(Object.entries(environment || {}).map(([key,value]) => ({key, value})));
+    setEnvRows(Object.entries(environment || {}).map(([key,value]) => {
+      if (typeof value === 'string' && value.startsWith('SECRET_REF:')) {
+        return { key, value: '', isSecret: true, secretName: value.substring('SECRET_REF:'.length) };
+      }
+      return { key, value };
+    }));
+    (async()=>{ try{ const res = await api.listSecrets(); setSecrets(res.secrets.map(s=>s.name)); }catch{} })();
   }, [open, handler, timeout, memory_size, environment, description]);
 
   const addEnv = () => setEnvRows([...envRows, {key:'', value:''}]);
   const submit = async () => {
     const env: Record<string,string> = {};
-    envRows.filter(r=>r.key).forEach(r=> env[r.key]=r.value);
+    envRows.filter(r=>r.key).forEach(r=> {
+      if (r.isSecret && r.secretName) env[r.key] = `SECRET_REF:${r.secretName}`; else env[r.key]=r.value;
+    });
     await updateFn.mutateAsync({ name, data: {
       handler: local.handler,
       timeout: local.timeout,
@@ -72,7 +82,20 @@ export function UpdateFunctionModal({
             {envRows.map((r,idx)=> (
               <div key={idx} className="grid grid-cols-2 gap-2 mt-1">
                 <Input placeholder="KEY" value={r.key} onChange={e=>{ const arr=[...envRows]; arr[idx]={...r, key:e.target.value}; setEnvRows(arr); }} />
-                <Input placeholder="value" value={r.value} onChange={e=>{ const arr=[...envRows]; arr[idx]={...r, value:e.target.value}; setEnvRows(arr); }} />
+                {r.isSecret ? (
+                  <select className="border rounded px-2 py-1 text-sm" value={r.secretName || ''} onChange={e=>{ const arr=[...envRows]; arr[idx]={...r, secretName:e.target.value}; setEnvRows(arr); }}>
+                    <option value="">Select secret…</option>
+                    {secrets.map(n=> <option key={n} value={n}>{n}</option>)}
+                  </select>
+                ) : (
+                  <Input placeholder="value" value={r.value} onChange={e=>{ const arr=[...envRows]; arr[idx]={...r, value:e.target.value}; setEnvRows(arr); }} />
+                )}
+                <div className="col-span-2 text-xs text-gray-600">
+                  <label className="inline-flex items-center space-x-2">
+                    <input type="checkbox" checked={!!r.isSecret} onChange={e=>{ const arr=[...envRows]; arr[idx]={...r, isSecret:e.target.checked}; if (!e.target.checked) arr[idx].secretName=undefined; setEnvRows(arr); }} />
+                    <span>Use secret (masked)</span>
+                  </label>
+                </div>
               </div>
             ))}
             <div className="mt-2"><Button variant="outline" size="sm" type="button" onClick={addEnv}>Add variable</Button></div>
@@ -87,4 +110,3 @@ export function UpdateFunctionModal({
     </div>
   );
 }
-

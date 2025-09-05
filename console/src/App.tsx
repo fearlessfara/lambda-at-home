@@ -8,6 +8,7 @@ import { CreateFunction } from './components/CreateFunction';
 import { FunctionDetail } from './components/FunctionDetail';
 import { HealthCheck } from './components/HealthCheck';
 import { ApiGateway } from './components/ApiGateway';
+import { Secrets } from './components/Secrets';
 
 // Create a client
 const queryClient = new QueryClient({
@@ -30,6 +31,7 @@ function App() {
             <Route path="/functions/create" element={<CreateFunction />} />
             <Route path="/functions/:name" element={<FunctionDetail />} />
             <Route path="/api-gateway" element={<ApiGateway />} />
+            <Route path="/secrets" element={<Secrets />} />
             <Route path="/health" element={<HealthCheck />} />
           </Routes>
         </Layout>

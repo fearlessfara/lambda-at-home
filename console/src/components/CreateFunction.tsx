@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, ArrowLeft } from 'lucide-react';
 import { Button } from './ui/button';
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useCreateFunction } from '../hooks/useFunctions';
 import { useToast } from './ui/use-toast';
 import { AVAILABLE_RUNTIMES } from '../types/api';
+import { api } from '../lib/api';
 
 export function CreateFunction() {
   const navigate = useNavigate();
@@ -23,7 +24,9 @@ export function CreateFunction() {
     timeout: 3,
     memorySize: 512,
   });
-  const [envRows, setEnvRows] = useState<{ key: string; value: string }[]>([]);
+  const [envRows, setEnvRows] = useState<{ key: string; value: string; isSecret?: boolean; secretName?: string }[]>([]);
+  const [secrets, setSecrets] = useState<string[]>([]);
+  useEffect(()=>{ (async()=>{ try{ const res = await api.listSecrets(); setSecrets(res.secrets.map(s=>s.name)); }catch{} })(); },[]);
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -79,9 +82,9 @@ export function CreateFunction() {
       const base64Zip = await convertFileToBase64(zipFile);
       
       const env: Record<string, string> = {};
-      // Collect env rows into a map
-      // Only include keys that are non-empty
-      envRows.filter(r => r.key).forEach(r => { env[r.key] = r.value; });
+      envRows.filter(r => r.key).forEach(r => {
+        if (r.isSecret && r.secretName) env[r.key] = `SECRET_REF:${r.secretName}`; else env[r.key] = r.value;
+      });
       
       const requestData = {
         function_name: formData.functionName,
@@ -240,17 +243,23 @@ export function CreateFunction() {
 
             <div className="space-y-2">
               <Label>Environment Variables</Label>
-              {envRows.map((r, idx) => (
-                <div key={idx} className="grid grid-cols-2 gap-2 mt-1">
-                  <Input
-                    placeholder="KEY"
-                    value={r.key}
-                    onChange={(e) => {
-                      const arr = [...envRows];
-                      arr[idx] = { ...r, key: e.target.value };
-                      setEnvRows(arr);
-                    }}
-                  />
+            {envRows.map((r, idx) => (
+              <div key={idx} className="grid grid-cols-2 gap-2 mt-1">
+                <Input
+                  placeholder="KEY"
+                  value={r.key}
+                  onChange={(e) => {
+                    const arr = [...envRows];
+                    arr[idx] = { ...r, key: e.target.value };
+                    setEnvRows(arr);
+                  }}
+                />
+                {r.isSecret ? (
+                  <select className="border rounded px-2 py-1 text-sm" value={r.secretName || ''} onChange={e=>{ const arr=[...envRows]; arr[idx]={...r, secretName:e.target.value}; setEnvRows(arr); }}>
+                    <option value="">Select secret…</option>
+                    {secrets.map(n=> <option key={n} value={n}>{n}</option>)}
+                  </select>
+                ) : (
                   <Input
                     placeholder="value"
                     value={r.value}
@@ -260,8 +269,15 @@ export function CreateFunction() {
                       setEnvRows(arr);
                     }}
                   />
+                )}
+                <div className="col-span-2 text-xs text-gray-600">
+                  <label className="inline-flex items-center space-x-2">
+                    <input type="checkbox" checked={!!r.isSecret} onChange={e=>{ const arr=[...envRows]; arr[idx]={...r, isSecret:e.target.checked}; if (!e.target.checked) arr[idx].secretName=undefined; setEnvRows(arr); }} />
+                    <span>Use secret (masked)</span>
+                  </label>
                 </div>
-              ))}
+              </div>
+            ))}
               <div className="mt-2">
                 <Button
                   variant="outline"

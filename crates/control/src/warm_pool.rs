@@ -290,6 +290,32 @@ impl WarmPool {
         ids
     }
 
+    /// Remove all containers belonging to a given function_id across all keys.
+    /// Returns the list of container IDs removed.
+    pub async fn drain_by_function_id(&self, function_id: Uuid) -> Vec<String> {
+        let mut removed: Vec<String> = Vec::new();
+        let mut containers = self.containers.lock().await;
+        let keys: Vec<FnKey> = containers.keys().cloned().collect();
+        for key in keys {
+            if let Some(list) = containers.get_mut(&key) {
+                let mut keep: Vec<WarmContainer> = Vec::with_capacity(list.len());
+                for c in list.drain(..) {
+                    if c.function_id == function_id {
+                        removed.push(c.container_id.clone());
+                    } else {
+                        keep.push(c);
+                    }
+                }
+                if keep.is_empty() {
+                    containers.remove(&key);
+                } else {
+                    containers.insert(key, keep);
+                }
+            }
+        }
+        removed
+    }
+
     /// Mark a specific instance by its instance_id as Active
     pub async fn mark_active_by_instance(&self, instance_id: &str) -> Option<(FnKey, String)> {
         let mut containers = self.containers.lock().await;

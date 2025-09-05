@@ -3,12 +3,14 @@ pub mod function;
 pub mod invoke;
 pub mod error;
 pub mod routes;
+pub mod secrets;
 
 pub use config::*;
 pub use function::*;
 pub use invoke::*;
 pub use error::*;
 pub use routes::*;
+pub use secrets::*;
 
 #[cfg(test)]
 mod tests {

@@ -13,6 +13,7 @@ use lambda_models::{
     PublishVersionRequest, CreateAliasRequest, UpdateAliasRequest, ConcurrencyConfig,
     ListFunctionsResponse, ListVersionsResponse, ListAliasesResponse, InvokeRequest,
     FunctionError, ErrorShape, CreateApiRouteRequest, ListApiRoutesResponse, ApiRoute,
+    ListSecretsResponse, SecretListItem, CreateSecretRequest,
 };
 use crate::AppState;
 use tracing::{info, error, instrument};
@@ -235,6 +236,42 @@ pub async fn delete_alias(
     }
 }
 
+// -------- Secrets admin --------
+#[instrument(skip(state))]
+pub async fn list_secrets(
+    State(state): State<AppState>,
+) -> Result<Json<ListSecretsResponse>, (StatusCode, Json<ErrorShape>)> {
+    match state.control.list_secrets().await {
+        Ok(items) => {
+            let secrets = items.into_iter().map(|(name, created_at)| SecretListItem { name, created_at }).collect();
+            Ok(Json(ListSecretsResponse { secrets }))
+        }
+        Err(e) => Err((StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR), Json(e.to_error_shape())))
+    }
+}
+
+#[instrument(skip(state))]
+pub async fn create_secret(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateSecretRequest>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorShape>)> {
+    match state.control.create_secret(&payload.name, &payload.value).await {
+        Ok(()) => Ok(StatusCode::CREATED),
+        Err(e) => Err((StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR), Json(e.to_error_shape())))
+    }
+}
+
+#[instrument(skip(state))]
+pub async fn delete_secret(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorShape>)> {
+    match state.control.delete_secret(&name).await {
+        Ok(()) => Ok(StatusCode::NO_CONTENT),
+        Err(e) => Err((StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR), Json(e.to_error_shape())))
+    }
+}
+
 #[instrument(skip(state))]
 pub async fn list_aliases(
     State(state): State<AppState>,
@@ -314,7 +351,6 @@ pub async fn invoke_function(
     body: Bytes,
 ) -> Result<(StatusCode, HeaderMap, Json<serde_json::Value>), (StatusCode, Json<ErrorShape>)> {
     info!("Invoking function: {}", name);
-    
     // Parse invocation type from headers
     let invocation_type = headers
         .get("X-Amz-Invocation-Type")
@@ -501,7 +537,6 @@ pub async fn api_gateway_proxy(
         .iter()
         .filter_map(|(k,v)| v.to_str().ok().map(|s| (k.to_string(), s.to_string())))
         .collect();
-
     let whole_body = axum::body::to_bytes(req.into_body(), 1024 * 1024).await.unwrap_or_else(|_| Bytes::new());
     let body_str = String::from_utf8_lossy(&whole_body).to_string();
 

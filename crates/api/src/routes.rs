@@ -1,5 +1,5 @@
 use axum::{
-    routing::{get, post, put, delete, any},
+    routing::{get, post, put, delete},
     Router,
 };
 use crate::{AppState, handlers::*, handlers::warm_pool_summary};
@@ -33,7 +33,10 @@ pub fn create_router() -> Router<AppState> {
         .route("/2015-03-31/functions/:name/concurrency", delete(delete_concurrency))
         
         // Invocation
-        .route("/2015-03-31/functions/:name/invocations", post(invoke_function))
+        .route(
+            "/2015-03-31/functions/:name/invocations",
+            post(|state, path, headers, body| async move { invoke_function(state, path, headers, body).await })
+        )
         
         // Health and metrics
         .route("/healthz", get(health_check))
@@ -44,7 +47,11 @@ pub fn create_router() -> Router<AppState> {
         .route("/admin/api-gateway/routes", get(list_api_routes))
         .route("/admin/api-gateway/routes", post(create_api_route))
         .route("/admin/api-gateway/routes/:id", delete(delete_api_route))
-        .fallback(any(api_gateway_proxy))
+        // Secrets admin
+        .route("/admin/secrets", get(list_secrets))
+        .route("/admin/secrets", post(create_secret))
+        .route("/admin/secrets/:name", delete(delete_secret))
+        .fallback(|state, req| async move { api_gateway_proxy(state, req).await })
 }
 
 pub fn build_router(state: AppState) -> Router {

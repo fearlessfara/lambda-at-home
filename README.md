@@ -1,16 +1,19 @@
 # Lambda@Home
 
-A Docker‑backed AWS Lambda clone that runs locally. Lambda@Home provides Lambda‑compatible APIs and executes functions in Docker containers with a Lambda‑like lifecycle.
+A Docker‑backed AWS Lambda clone that runs locally. Lambda@Home provides Lambda‑compatible APIs, a web console, and executes functions in Docker containers with a Lambda‑like lifecycle.
 
 ## Features
 
 - Lambda‑compatible User API and in‑container Runtime API
 - Docker‑based isolation for function execution
-- Runtimes: Node.js 18, Python 3.11, Rust
+- Runtimes: Node.js 18/22, Python 3.11, Rust
 - Warm pool + reuse: `WarmIdle → Active → WarmIdle`
 - Idle management: soft stop and hard removal with watchdog
 - Autoscaling: scales to queue depth; restarts stopped instances first
-- Concurrency control: global (and ready for per‑function)
+- Concurrency control: global + per‑function reserved concurrency
+- API Gateway path proxy with route mappings (prefix + method)
+- Web Console: create/update functions, test invoke, manage API routes and Secrets
+- Secrets: store once, reference in env as `SECRET_REF:NAME` (masked in UI)
 - Metrics: Prometheus endpoint; structured tracing logs
 - Security: non‑root, read‑only rootfs, capability drop, tmpfs
 
@@ -24,6 +27,7 @@ Lambda@Home consists of several components:
 - **Invoker**: Docker container lifecycle management
 - **Packaging**: ZIP processing and Docker image building
 - **Metrics**: Prometheus metrics and structured logging
+- **Console**: React app (Vite) for managing functions, API Gateway routes, and Secrets
 
 ## Quick Start
 
@@ -58,6 +62,23 @@ The server will start on:
 - Runtime API: http://127.0.0.1:9001
 - Health: http://127.0.0.1:9000/healthz
 - Metrics: http://127.0.0.1:9000/metrics
+
+### Web Console (optional, recommended)
+
+Run the Console for easier management and testing:
+
+```bash
+cd console
+npm install
+npm run dev
+# open http://localhost:3000
+```
+
+Configure the API base URL via `console/.env` (defaults to `http://localhost:9000`):
+
+```
+VITE_API_URL=http://localhost:9000
+```
 
 ### Create and invoke a function (curl)
 
@@ -110,8 +131,8 @@ max_global_concurrency = 256
 
 ## Supported Runtimes
 
-### Node.js 18
-- Runtime: `nodejs18.x`
+### Node.js 18/22
+- Runtimes: `nodejs18.x`, `nodejs22.x`
 - Handler format: `filename.export`
 - Example: `index.handler`
 
@@ -137,8 +158,30 @@ max_global_concurrency = 256
 - `POST /2015-03-31/functions/{name}/versions` - Publish version
 - `GET /2015-03-31/functions` - List functions
 - `POST /2015-03-31/functions/{name}/invocations` - Invoke function
+- `PUT /2015-03-31/functions/{name}/concurrency` - Set reserved concurrency
+- `GET /2015-03-31/functions/{name}/concurrency` - Get reserved concurrency
+- `DELETE /2015-03-31/functions/{name}/concurrency` - Clear reserved concurrency
 - `GET /healthz` - Health check
 - `GET /metrics` - Prometheus metrics
+
+### API Gateway Path Proxy
+
+Any unmatched path is treated as an API Gateway-style invoke:
+
+- If a configured route mapping matches (longest prefix, optional method) → invokes mapped function
+- Else the first URL segment is treated as a function name (if it exists)
+
+Function results are mapped back to HTTP as follows:
+- If payload is an object with `statusCode/body/headers` → use those
+- If payload is an object with `body` only → return body with status 200
+- If payload is a string → return text body
+- Otherwise → return JSON payload (status 200)
+
+Admin endpoints for routes:
+
+- `GET /admin/api-gateway/routes` – list routes
+- `POST /admin/api-gateway/routes` – create route `{ path, method?, function_name }`
+- `DELETE /admin/api-gateway/routes/:id` – delete route
 
 ### Runtime API (For Containers)
 
@@ -172,6 +215,7 @@ lambda@home/
 │   ├── models/        # Shared data models
 │   ├── metrics/       # Metrics and logging
 │   └── cli/           # Command-line tools
+├── console/           # Web console (Vite + React)
 ├── runtimes/          # Runtime Dockerfiles and bootstrap scripts
 ├── examples/          # Example functions
 ├── configs/           # Configuration files
@@ -257,6 +301,17 @@ docker logs <container_id>
 MIT License - see LICENSE file for details.
 
 ## Roadmap
+ 
+### Recently added
+- Web Console: functions, testing, API Gateway route management, Secrets
+- API Gateway route mappings (prefix + method)
+- Per-function reserved concurrency
+- Secrets store with `SECRET_REF:NAME` env resolution
+
+### Next up
+- Code update flow and versions/aliases UI
+- Layers support and more runtimes
+- Provisioned concurrency & prewarm controls
 
 - [ ] VPC networking support
 - [ ] Provisioned concurrency

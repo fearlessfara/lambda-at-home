@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Code, Activity, GitBranch } from 'lucide-react';
+import { Code, Activity, GitBranch, Lock } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface LayoutProps {
@@ -13,6 +13,7 @@ export function Layout({ children }: LayoutProps) {
   const navigation = [
     { name: 'Functions', href: '/functions', icon: Code },
     { name: 'API Gateway', href: '/api-gateway', icon: GitBranch },
+    { name: 'Secrets', href: '/secrets', icon: Lock },
     { name: 'Health', href: '/health', icon: Activity },
   ];
 
