@@ -11,15 +11,15 @@ jobs:
     name: Lint, Test, and Build UI
     runs-on: ubuntu-latest
     env:
-      RUSTUP_TOOLCHAIN: nightly
+      RUSTUP_TOOLCHAIN: 1.88.0
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust (nightly)
-        uses: dtolnay/rust-toolchain@nightly
+      - name: Install Rust (stable, pin to local)
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: nightly
+          toolchain: 1.88.0
           override: true
           components: clippy, rustfmt
 

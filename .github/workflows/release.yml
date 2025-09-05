@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: ${{ matrix.os }}
     env:
-      RUSTUP_TOOLCHAIN: nightly
+      RUSTUP_TOOLCHAIN: 1.88.0
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -28,10 +28,10 @@ jobs:
           npm ci
           npm run build
 
-      - name: Install Rust (nightly)
-        uses: dtolnay/rust-toolchain@nightly
+      - name: Install Rust (stable, pin to local)
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: nightly
+          toolchain: 1.88.0
           override: true
           components: rustfmt
 
