@@ -80,19 +80,18 @@ impl Invoker {
         let container_name = format!("lambda-{}-{}", function.function_name, uuid::Uuid::new_v4());
 
         // Build environment variables
-        let mut env = Vec::new();
-        env.push("AWS_LAMBDA_RUNTIME_API=host.docker.internal:9001".to_string());
-        env.push("AWS_LAMBDA_FUNCTION_NAME=".to_string() + &function.function_name);
-        env.push("AWS_LAMBDA_FUNCTION_VERSION=".to_string() + &function.version);
-        env.push(
+        let mut env = vec![
+            "AWS_LAMBDA_RUNTIME_API=host.docker.internal:9001".to_string(),
+            "AWS_LAMBDA_FUNCTION_NAME=".to_string() + &function.function_name,
+            "AWS_LAMBDA_FUNCTION_VERSION=".to_string() + &function.version,
             "AWS_LAMBDA_FUNCTION_MEMORY_SIZE=".to_string() + &function.memory_size.to_string(),
-        );
-        env.push("AWS_LAMBDA_LOG_GROUP_NAME=/aws/lambda/".to_string() + &function.function_name);
-        env.push("AWS_LAMBDA_LOG_STREAM_NAME=".to_string() + &uuid::Uuid::new_v4().to_string());
-        env.push("AWS_LAMBDA_RUNTIME_DIR=/var/runtime".to_string());
-        env.push("LAMBDA_TASK_ROOT=/var/task".to_string());
-        env.push("LAMBDA_RUNTIME_DIR=/var/runtime".to_string());
-        env.push("TZ=UTC".to_string());
+            "AWS_LAMBDA_LOG_GROUP_NAME=/aws/lambda/".to_string() + &function.function_name,
+            "AWS_LAMBDA_LOG_STREAM_NAME=".to_string() + &uuid::Uuid::new_v4().to_string(),
+            "AWS_LAMBDA_RUNTIME_DIR=/var/runtime".to_string(),
+            "LAMBDA_TASK_ROOT=/var/task".to_string(),
+            "LAMBDA_RUNTIME_DIR=/var/runtime".to_string(),
+            "TZ=UTC".to_string(),
+        ];
 
         // Add custom environment variables
         for (key, value) in env_vars {

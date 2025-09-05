@@ -52,7 +52,9 @@ impl ZipHandler {
             files.push(ZipFileInfo {
                 name: file_name,
                 size: file_size,
-                is_executable: file.unix_mode().map_or(false, |mode| mode & 0o111 != 0),
+                is_executable: file
+                    .unix_mode()
+                    .is_some_and(|mode| mode & 0o111 != 0),
             });
         }
 
