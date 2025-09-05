@@ -3,6 +3,9 @@ use axum::{
     http::{HeaderMap, StatusCode, HeaderValue, HeaderName},
     response::Json,
     body::Bytes,
+    http::Request,
+    body::Body,
+    response::IntoResponse,
 };
 use std::collections::HashMap;
 use lambda_models::{
@@ -410,6 +413,94 @@ pub async fn metrics(
         Err(e) => {
             error!("Failed to get metrics: {}", e);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+
+// API Gateway-style proxy: path name equals function name
+// Captures any unmatched path and invokes a function named by the first segment.
+#[instrument(skip(state, req))]
+pub async fn api_gateway_proxy(
+    State(state): State<AppState>,
+    mut req: Request<Body>,
+) -> impl IntoResponse {
+    let uri = req.uri().clone();
+    let path = uri.path().to_string();
+    let mut segs = path.trim_start_matches('/').split('/');
+    let func_name = match segs.next() {
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error":"Function name not provided"}))).into_response(),
+    };
+
+    // Build API Gateway proxy-like event
+    let method = req.method().to_string();
+    let query_map = uri.query()
+        .map(|q| form_urlencoded::parse(q.as_bytes()).into_owned().collect::<std::collections::HashMap<String,String>>())
+        .unwrap_or_default();
+    let headers_map: std::collections::HashMap<String,String> = req.headers()
+        .iter()
+        .filter_map(|(k,v)| v.to_str().ok().map(|s| (k.to_string(), s.to_string())))
+        .collect();
+
+    let whole_body = axum::body::to_bytes(req.into_body(), 1024 * 1024).await.unwrap_or_else(|_| Bytes::new());
+    let body_str = String::from_utf8_lossy(&whole_body).to_string();
+
+    let event = serde_json::json!({
+        "resource": path,
+        "path": path,
+        "httpMethod": method,
+        "headers": headers_map,
+        "queryStringParameters": query_map,
+        "pathParameters": serde_json::Value::Null,
+        "stageVariables": serde_json::Value::Null,
+        "requestContext": { "path": path },
+        "body": if body_str.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(body_str.clone()) },
+        "isBase64Encoded": false
+    });
+
+    let request = lambda_models::InvokeRequest {
+        function_name: func_name.clone(),
+        invocation_type: lambda_models::InvocationType::RequestResponse,
+        log_type: None,
+        client_context: None,
+        payload: Some(event),
+        qualifier: None,
+    };
+
+    match state.control.invoke_function(request).await {
+        Ok(resp) => {
+            // If the function returned an API Gateway proxy result (statusCode/body/headers), map it.
+            if let Some(payload) = &resp.payload {
+                if let Some(status) = payload.get("statusCode").and_then(|v| v.as_u64()) {
+                    let mut headers = HeaderMap::new();
+                    if let Some(hs) = payload.get("headers").and_then(|v| v.as_object()) {
+                        for (k,v) in hs.iter() {
+                            if let Some(s) = v.as_str() {
+                                if let Ok(name) = HeaderName::from_bytes(k.as_bytes()) {
+                                    if let Ok(val) = HeaderValue::from_str(s) { headers.insert(name, val); }
+                                }
+                            }
+                        }
+                    }
+                    let body = payload.get("body").cloned().unwrap_or(serde_json::Value::Null);
+                    let body_bytes = if body.is_string() { Body::from(body.as_str().unwrap().to_owned()) } else { Body::from(body.to_string()) };
+                    return (StatusCode::from_u16(status as u16).unwrap_or(StatusCode::OK), headers, body_bytes).into_response();
+                }
+            }
+            // Default: return JSON payload as body with status code
+            let status = StatusCode::from_u16(resp.status_code).unwrap_or(StatusCode::OK);
+            let mut headers = HeaderMap::new();
+            for (k,v) in resp.headers {
+                if let Ok(name) = HeaderName::from_bytes(k.as_bytes()) {
+                    if let Ok(val) = HeaderValue::from_str(&v) { headers.insert(name, val); }
+                }
+            }
+            (status, headers, Json(resp.payload.unwrap_or(serde_json::Value::Null))).into_response()
+        }
+        Err(e) => {
+            let status = StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            (status, Json(e.to_error_shape())).into_response()
         }
     }
 }

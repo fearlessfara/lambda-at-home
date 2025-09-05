@@ -12,6 +12,7 @@ axum = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
+form_urlencoded = "1"
 
 # Shared models
 lambda-models = { path = "../models" }

@@ -1,4 +1,4 @@
-.PHONY: build test test-unit test-int fmt clippy clean run test-autoscaling test-service test-metrics test-node-runtimes
+.PHONY: build test test-unit test-int fmt clippy clean run test-autoscaling test-service test-metrics test-node-runtimes test-apigw-proxy
 
 # Build the project
 build:
@@ -54,6 +54,10 @@ test-metrics:
 test-node-runtimes:
 	./scripts/test-node-runtimes.sh
 
+# API Gateway path proxy test
+test-apigw-proxy:
+	./scripts/test-apigw-proxy.sh
+
 # CI targets
 ci: fmt-check clippy test-unit
 
@@ -74,8 +78,9 @@ help:
 	@echo "  run        - Run the server"
 	@echo "  test-autoscaling - Run autoscaling burst + reuse smoke test"
 	@echo "  test-service - Run end-to-end service smoke test"
-	@echo "  test-metrics - Check /metrics endpoint"
+	@echo "  test-metrics     - Check /metrics endpoint"
 	@echo "  test-node-runtimes - Create & invoke functions with Node 18.x and 22.x"
+	@echo "  test-apigw-proxy - Create function and invoke via /<function-name> path proxy"
 	@echo "  ci         - Run CI checks (format, clippy, unit tests)"
 	@echo "  ci-full    - Run full CI with integration tests"
 	@echo "  help       - Show this help"

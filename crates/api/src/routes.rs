@@ -1,5 +1,5 @@
 use axum::{
-    routing::{get, post, put, delete},
+    routing::{get, post, put, delete, any},
     Router,
 };
 use crate::{AppState, handlers::*};
@@ -38,6 +38,7 @@ pub fn create_router() -> Router<AppState> {
         // Health and metrics
         .route("/healthz", get(health_check))
         .route("/metrics", get(metrics))
+        .fallback(any(api_gateway_proxy))
 }
 
 pub fn build_router(state: AppState) -> Router {
