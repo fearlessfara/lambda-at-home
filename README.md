@@ -2,6 +2,8 @@
 
 A Docker‑backed AWS Lambda clone that runs locally. Lambda@Home provides Lambda‑compatible APIs, a web console, and executes functions in Docker containers with a Lambda‑like lifecycle.
 
+Repository: https://github.com/fearlessfara/lambda-at-home
+
 ## Features
 
 - Lambda‑compatible User API and in‑container Runtime API
@@ -41,7 +43,7 @@ Lambda@Home consists of several components:
 
 1) Clone the repository
 ```bash
-git clone <repository-url>
+git clone https://github.com/fearlessfara/lambda-at-home.git
 cd lambda@home
 ```
 
