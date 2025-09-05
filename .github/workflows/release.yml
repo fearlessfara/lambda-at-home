@@ -12,7 +12,19 @@ jobs:
       RUSTUP_TOOLCHAIN: 1.88.0
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            arch: x86_64
+            platform: linux-x86_64
+          - os: macos-latest
+            arch: x86_64
+            platform: macos-x86_64
+          - os: macos-latest
+            arch: arm64
+            platform: macos-arm64
+          - os: windows-latest
+            arch: x86_64
+            platform: windows-x86_64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,81 +66,107 @@ jobs:
       - name: Build release binary
         run: cargo build --release --bin lambda-at-home-server
 
-      - name: Package artifact (Unix)
-        if: runner.os != 'Windows'
+      - name: Package binary
         shell: bash
         run: |
-          OS=${{ runner.os }}
-          ARCH=${{ runner.arch }}
-          VERSION=${{ github.ref_name }}
-          # Use tag as-is (e.g., v1.2.3)
-          # Normalize OS to conventional slug
-          case "$OS" in
-            Linux) OS_SLUG=linux ;;
-            macOS) OS_SLUG=darwin ;;
-            *) OS_SLUG=$(echo "$OS" | tr '[:upper:]' '[:lower:]') ;;
-          esac
-          # Normalize ARCH to conventional slug
-          case "$ARCH" in
-            X64) ARCH_SLUG=x86_64 ;;
-            ARM64) ARCH_SLUG=aarch64 ;;
-            *) ARCH_SLUG=$(echo "$ARCH" | tr '[:upper:]' '[:lower:]') ;;
-          esac
-          BIN=target/release/lambda-at-home-server
-          OUT=lambda-at-home-server-${VERSION}-${OS_SLUG}-${ARCH_SLUG}
-          mkdir -p dist
-          cp "$BIN" "dist/${OUT}"
+          mkdir -p release-assets
+          
+          # Determine binary name based on OS
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            binary_name="lambda-at-home-server.exe"
+          else
+            binary_name="lambda-at-home-server"
+          fi
+          
+          # Copy binary with platform-specific naming
+          cp "target/release/${binary_name}" "release-assets/lambda-at-home-server-${{ github.ref_name }}-${{ matrix.platform }}"
+          
+          # Make executable (Unix only)
+          if [[ "${{ runner.os }}" != "Windows" ]]; then
+            chmod +x "release-assets/lambda-at-home-server-${{ github.ref_name }}-${{ matrix.platform }}"
+          fi
+          
+          echo "✅ Packaged ${{ runner.os }} ${{ matrix.arch }} binary: lambda-at-home-server-${{ github.ref_name }}-${{ matrix.platform }}"
 
-      - name: Package artifact (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        env:
-          ARCH: ${{ runner.arch }}
-        run: |
-          $OS = "windows"
-          $VERSION = "${{ github.ref_name }}"
-          $BIN = "target/release/lambda-at-home-server.exe"
-          switch ($env:ARCH) {
-            'X64'   { $archSlug = 'x86_64' }
-            'ARM64' { $archSlug = 'aarch64' }
-            default { $archSlug = $env:ARCH.ToLower() }
-          }
-          $OUT = "lambda-at-home-server-$VERSION-$OS-$archSlug.exe"
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item $BIN (Join-Path dist $OUT)
-
-      - name: Upload artifact
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: lambda-at-home-server-${{ runner.os }}-${{ runner.arch }}
-          path: dist/
-          retention-days: 30
+          name: binary-${{ runner.os }}-${{ matrix.arch }}
+          path: release-assets/
+          retention-days: 1
 
-  publish:
-    runs-on: ubuntu-latest
+  release:
     needs: build
+    runs-on: ubuntu-latest
     steps:
-      - name: Download artifacts
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          path: artifacts/
 
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
-          find artifacts -name "lambda-at-home-server-*" -type f -exec cp {} release-assets/ \;
-          # Copy install scripts
+          
+          echo "🔍 Debugging artifact structure:"
+          find artifacts/ -type f -name "*" | head -20
+          echo "---"
+          
+          # Copy all binaries from artifacts
+          echo "📦 Copying binaries from artifacts..."
+          find artifacts/ -name "lambda-at-home-server-*" -exec cp {} release-assets/ \;
+          
+          # Copy install scripts and documentation
+          echo "📄 Copying documentation and scripts..."
           cp install-lambda-at-home.sh release-assets/
           cp setup.sh release-assets/
           cp INSTALL.md release-assets/
+          
           # Create checksums for binaries
+          echo "🔐 Creating checksums..."
           cd release-assets
           for file in lambda-at-home-server-*; do
             if [[ -f "$file" ]]; then
               sha256sum "$file" > "${file}.sha256"
+              echo "✅ Created checksum for $file"
             fi
           done
+          
+          echo "📦 Final release assets:"
           ls -la
+          echo "---"
+          echo "📊 Asset count: $(ls -1 | wc -l) files"
+          
+          # Verify we have all expected binaries
+          echo "🔍 Verifying expected binaries..."
+          expected_binaries=(
+            "lambda-at-home-server-${{ github.ref_name }}-linux-x86_64"
+            "lambda-at-home-server-${{ github.ref_name }}-macos-x86_64"
+            "lambda-at-home-server-${{ github.ref_name }}-macos-arm64"
+            "lambda-at-home-server-${{ github.ref_name }}-windows-x86_64.exe"
+          )
+          
+          missing_binaries=()
+          for binary in "${expected_binaries[@]}"; do
+            if [[ ! -f "$binary" ]]; then
+              missing_binaries+=("$binary")
+            else
+              echo "✅ Found: $binary"
+            fi
+          done
+          
+          if [[ ${#missing_binaries[@]} -gt 0 ]]; then
+            echo "❌ Missing binaries:"
+            printf '%s\n' "${missing_binaries[@]}"
+            echo "Available files:"
+            ls -la lambda-at-home-server-*
+            exit 1
+          else
+            echo "✅ All expected binaries found!"
+          fi
 
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v2
@@ -138,7 +176,7 @@ jobs:
           body: |
             ## Lambda@Home ${{ github.ref_name }}
             
-            ### Installation
+            ### Quick Installation
             
             Download and install the binary for your platform:
             
@@ -148,20 +186,66 @@ jobs:
             
             ### Manual Installation
             
-            Download the appropriate binary for your platform and make it executable:
+            Download the appropriate binary for your platform:
             
-            - **Linux x86_64**: `lambda-at-home-server-${{ github.ref_name }}-linux-x86_64`
-            - **macOS x86_64**: `lambda-at-home-server-${{ github.ref_name }}-darwin-x86_64`
-            - **macOS ARM64**: `lambda-at-home-server-${{ github.ref_name }}-darwin-aarch64`
-            - **Windows x86_64**: `lambda-at-home-server-${{ github.ref_name }}-windows-x86_64.exe`
+            **Linux x86_64:**
+            ```bash
+            wget https://github.com/fearlessfara/lambda-at-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-linux-x86_64
+            chmod +x lambda-at-home-server-${{ github.ref_name }}-linux-x86_64
+            sudo mv lambda-at-home-server-${{ github.ref_name }}-linux-x86_64 /usr/local/bin/lambda-at-home-server
+            ```
+            
+            **macOS x86_64 (Intel):**
+            ```bash
+            curl -L -o lambda-at-home-server https://github.com/fearlessfara/lambda-at-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-macos-x86_64
+            chmod +x lambda-at-home-server
+            sudo mv lambda-at-home-server /usr/local/bin/
+            ```
+            
+            **macOS ARM64 (Apple Silicon):**
+            ```bash
+            curl -L -o lambda-at-home-server https://github.com/fearlessfara/lambda-at-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-macos-arm64
+            chmod +x lambda-at-home-server
+            sudo mv lambda-at-home-server /usr/local/bin/
+            ```
+            
+            **Windows x86_64:**
+            ```powershell
+            Invoke-WebRequest -Uri "https://github.com/fearlessfara/lambda-at-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-windows-x86_64.exe" -OutFile "lambda-at-home-server.exe"
+            ```
+            
+            ### Available Binaries
+            
+            This release includes the following binaries:
+            
+            - `lambda-at-home-server-${{ github.ref_name }}-linux-x86_64` - Linux x86_64
+            - `lambda-at-home-server-${{ github.ref_name }}-macos-x86_64` - macOS Intel
+            - `lambda-at-home-server-${{ github.ref_name }}-macos-arm64` - macOS Apple Silicon
+            - `lambda-at-home-server-${{ github.ref_name }}-windows-x86_64.exe` - Windows x86_64
+            
+            Each binary includes a corresponding `.sha256` checksum file for verification.
             
             ### Features
             
-            - Docker-backed AWS Lambda clone
-            - Embedded web console
-            - Multi-runtime support (Node.js, Python, Rust)
-            - Warm container pool with auto-scaling
-            - AWS Lambda-compatible APIs
+            - 🐳 Docker-backed AWS Lambda clone
+            - 🌐 Embedded web console (no separate setup needed)
+            - 🚀 Multi-runtime support (Node.js, Python, Rust)
+            - ⚡ Warm container pool with auto-scaling
+            - 🔌 AWS Lambda-compatible APIs
+            - 📊 Prometheus metrics and structured logging
+            
+            ### Usage
+            
+            ```bash
+            # Start the server
+            lambda-at-home-server
+            
+            # Access the web console
+            open http://localhost:9000
+            
+            # API endpoints
+            curl http://localhost:9000/api/healthz
+            ```
             
             ### Documentation
             
