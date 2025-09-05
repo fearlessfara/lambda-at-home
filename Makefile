@@ -1,8 +1,12 @@
-.PHONY: build test test-unit test-int fmt clippy clean run test-autoscaling test-service test-metrics test-node-runtimes test-apigw-proxy
+.PHONY: build test test-unit test-int fmt clippy clean run test-autoscaling test-service test-metrics test-node-runtimes test-apigw-proxy ui-build release run-release
 
 # Build the project
 build:
 	cargo build
+
+# Build the web console (embedded into the binary at build time)
+ui-build:
+	cd console && npm ci && npm run build
 
 # Run unit tests only
 test-unit:
@@ -40,6 +44,14 @@ clean:
 run:
 	cargo run --bin lambda-at-home-server
 
+# Build a release binary with embedded console assets
+release: ui-build
+	cargo build --release --bin lambda-at-home-server
+
+# Run the release binary
+run-release:
+	./target/release/lambda-at-home-server
+
 # Scripted smoke tests (require server + Docker)
 test-autoscaling:
 	./scripts/test-autoscaling.sh
@@ -68,6 +80,9 @@ ci-full: fmt-check clippy test-unit test-int
 help:
 	@echo "Available targets:"
 	@echo "  build      - Build the project"
+	@echo "  ui-build   - Build the web console (embedded assets)"
+	@echo "  release    - Build release binary with embedded console"
+	@echo "  run-release- Run the release binary"
 	@echo "  test       - Run unit tests"
 	@echo "  test-unit  - Run unit tests only"
 	@echo "  test-int   - Run integration tests (requires Docker)"

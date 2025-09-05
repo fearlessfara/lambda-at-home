@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
@@ -15,9 +15,7 @@ export function ApiGateway() {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<{ path: string; method: string; function_name: string }>({ path: '/example', method: 'ANY', function_name: '' });
   const { data: functionsData, isLoading: fnsLoading } = useFunctions();
-  const [fnFilter, setFnFilter] = useState('');
   const fnNames = (functionsData?.functions ?? []).map(f=>f.function_name).sort();
-  const filteredFnNames = useMemo(() => fnNames.filter(n => n.toLowerCase().includes(fnFilter.toLowerCase())), [fnNames, fnFilter]);
   const [err, setErr] = useState<string>('');
 
   const fetchRoutes = async ()=>{

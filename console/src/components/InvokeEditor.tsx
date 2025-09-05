@@ -116,9 +116,6 @@ export function InvokeEditor({ functionName }: InvokeEditorProps) {
   const onLoadPreset = (name: string) => {
     const p = presets.find(p=>p.name===name); if (p) { setPayload(p.payload); validateJson(p.payload); }
   };
-  const onDeletePreset = (name: string) => {
-    const next = presets.filter(p=>p.name!==name); setPresets(next); savePresets(next);
-  };
   const formatResult = (result: any) => {
     if (result.error) {
       return JSON.stringify({ error: result.error }, null, 2);

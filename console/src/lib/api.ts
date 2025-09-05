@@ -5,7 +5,8 @@ import {
   ErrorShape 
 } from '../types/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:9000';
+// Default to relative /api when served behind the same origin; override via VITE_API_URL in dev
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 class ApiError extends Error {
   constructor(
