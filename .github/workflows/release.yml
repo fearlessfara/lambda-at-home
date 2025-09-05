@@ -1,9 +1,8 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
+  release:
+    types: [published]
 
 jobs:
   build:
@@ -12,7 +11,7 @@ jobs:
       RUSTUP_TOOLCHAIN: 1.88.0
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,19 +47,53 @@ jobs:
       - name: Build release binary
         run: cargo build --release --bin lambda-at-home-server
 
-      - name: Package artifact
+      - name: Package artifact (Unix)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           OS=${{ runner.os }}
+          ARCH=${{ runner.arch }}
+          VERSION=${{ github.event.release.tag_name }}
+          # Use tag as-is (e.g., v1.2.3)
+          # Normalize OS to conventional slug
+          case "$OS" in
+            Linux) OS_SLUG=linux ;;
+            macOS) OS_SLUG=darwin ;;
+            *) OS_SLUG=$(echo "$OS" | tr '[:upper:]' '[:lower:]') ;;
+          esac
+          # Normalize ARCH to conventional slug
+          case "$ARCH" in
+            X64) ARCH_SLUG=x86_64 ;;
+            ARM64) ARCH_SLUG=aarch64 ;;
+            *) ARCH_SLUG=$(echo "$ARCH" | tr '[:upper:]' '[:lower:]') ;;
+          esac
           BIN=target/release/lambda-at-home-server
-          OUT=lambda-at-home-server-${OS}
+          OUT=lambda-at-home-server-${VERSION}-${OS_SLUG}-${ARCH_SLUG}
           mkdir -p dist
-          cp "$BIN" dist/${OUT}
+          cp "$BIN" "dist/${OUT}"
+
+      - name: Package artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          ARCH: ${{ runner.arch }}
+        run: |
+          $OS = "windows"
+          $VERSION = "${{ github.event.release.tag_name }}"
+          $BIN = "target/release/lambda-at-home-server.exe"
+          switch ($env:ARCH) {
+            'X64'   { $archSlug = 'x86_64' }
+            'ARM64' { $archSlug = 'aarch64' }
+            default { $archSlug = $env:ARCH.ToLower() }
+          }
+          $OUT = "lambda-at-home-server-$VERSION-$OS-$archSlug.exe"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item $BIN (Join-Path dist $OUT)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: lambda-at-home-server-${{ runner.os }}
+          name: lambda-at-home-server-${{ runner.os }}-${{ runner.arch }}
           path: dist/*
 
   publish:
@@ -72,9 +105,10 @@ jobs:
         with:
           path: dist
 
-      - name: Create GitHub Release
+      - name: Upload assets to existing Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.release.tag_name }}
           files: |
             dist/**/lambda-at-home-server-*
         env:

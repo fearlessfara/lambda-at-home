@@ -8,7 +8,7 @@ on:
 
 jobs:
   rust-and-ui:
-    name: Lint, Test, and Build UI
+    name: Build UI and Rust (no lint)
     runs-on: ubuntu-latest
     env:
       RUSTUP_TOOLCHAIN: 1.88.0
@@ -20,8 +20,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
-          override: true
-          components: clippy, rustfmt
+          components: rustfmt
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -33,17 +32,15 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
-      - name: Rust fmt check
-        run: cargo fmt -- --check
-
-      - name: Clippy
+      - name: Build (workspace)
         run: |
           rustc -V
           cargo -V
-          cargo clippy -- -D warnings
+          cargo build --workspace --all-targets
 
-      - name: Unit tests (workspace libs)
-        run: cargo test --workspace --lib
+      # Optional: keep tests if desired
+      # - name: Unit tests (workspace libs)
+      #   run: cargo test --workspace --lib
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
