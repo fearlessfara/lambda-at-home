@@ -1,6 +1,0 @@
-{
-  "name": "test-function",
-  "version": "1.0.0",
-  "description": "Test function for Lambda@Home",
-  "main": "index.js"
-}

@@ -15,15 +15,61 @@ Thumbs.db
 # Lambda@Home specific
 /data/
 *.log
+server.log
 
 # Environment files
 .env
 .env.local
 
+# E2E Tests
+e2e/node_modules/
+e2e/coverage/
+e2e/test-results/
+e2e/*.log
+e2e/.nyc_output/
+
 # Test artifacts
 test-results/
 coverage/
+*.lcov
+
+# Docker
+.dockerignore
 
 # Temporary files
 *.tmp
 *.temp
+*.bak
+*.backup
+
+# Lambda function artifacts
+*.zip
+!e2e/test-function.zip
+!examples/api-caller-*.zip
+
+# Build artifacts
+dist/
+build/
+out/
+console/dist/
+
+# Runtime files
+*.pid
+*.sock
+
+# Logs
+logs/
+*.log.*
+
+# Cache
+.cache/
+.parcel-cache/
+
+# Coverage reports
+htmlcov/
+.coverage
+coverage.xml
+*.coverage
+
+# Test coverage
+.nyc_output/

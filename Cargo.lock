@@ -1553,6 +1553,7 @@ dependencies = [
  "flate2",
  "futures",
  "lambda-models",
+ "rust-embed",
  "serde",
  "serde_json",
  "sha2",

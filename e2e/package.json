@@ -1,0 +1,53 @@
+{
+  "name": "lambda-at-home-e2e-tests",
+  "version": "1.0.0",
+  "description": "End-to-end test suite for Lambda@Home using Jest",
+  "main": "tests/setup.js",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:service": "jest --testNamePattern='Service'",
+    "test:metrics": "jest --testNamePattern='Metrics'",
+    "test:runtimes": "jest --testNamePattern='Runtimes'",
+    "test:apigw": "jest --testNamePattern='API Gateway'",
+    "test:autoscaling": "jest --testNamePattern='Autoscaling'",
+    "test:integration": "jest --testPathPattern='integration'",
+    "test:unit": "jest --testPathPattern='unit'",
+    "cleanup": "node utils/cleanup.js"
+  },
+  "keywords": ["lambda", "test", "jest", "lambda-at-home", "integration"],
+  "author": "Lambda@Home",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.8",
+    "supertest": "^6.3.3",
+    "axios": "^1.6.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/**/*.test.js",
+      "**/tests/**/*.spec.js"
+    ],
+    "collectCoverageFrom": [
+      "**/*.js",
+      "!**/node_modules/**",
+      "!**/tests/**",
+      "!**/coverage/**"
+    ],
+    "coverageDirectory": "coverage",
+    "coverageReporters": ["text", "lcov", "html"],
+    "setupFilesAfterEnv": ["<rootDir>/tests/setup.js"],
+    "testTimeout": 60000,
+    "verbose": true,
+    "forceExit": true,
+    "detectOpenHandles": true,
+    "clearMocks": true,
+    "restoreMocks": true
+  }
+}

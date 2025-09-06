@@ -23,12 +23,18 @@ COPY . /var/task/
 # Set working directory
 WORKDIR /var/task
 
-# Install dependencies if package.json exists (prefer lockfiles)
-RUN if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then \
+# Install dependencies only if not vendored
+# - If node_modules already exists in the package, use it as-is
+# - Else prefer lockfiles for reproducible installs
+RUN if [ -d node_modules ]; then \
+      echo "Using vendored node_modules"; \
+    elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then \
       npm ci --omit=dev; \
     elif [ -f package.json ]; then \
       npm install --omit=dev; \
-    fi && npm cache clean --force
+    else \
+      echo "No package.json found; skipping npm install"; \
+    fi && npm cache clean --force || true
 
 # Copy bootstrap script
 COPY bootstrap.js /var/runtime/bootstrap.js
@@ -44,6 +50,7 @@ export AWS_LAMBDA_LOG_GROUP_NAME=${{AWS_LAMBDA_LOG_GROUP_NAME}}\n\
 export AWS_LAMBDA_LOG_STREAM_NAME=${{AWS_LAMBDA_LOG_STREAM_NAME}}\n\
 export LAMBDA_TASK_ROOT=/var/task\n\
 export LAMBDA_RUNTIME_DIR=/var/runtime\n\
+export NODE_PATH="/var/task/node_modules:/opt/nodejs/node_modules:/opt/node_modules:$NODE_PATH"\n\
 \n\
 # Start the runtime\n\
 node /var/runtime/bootstrap.js\n' > /var/runtime/bootstrap.sh && chmod +x /var/runtime/bootstrap.sh
