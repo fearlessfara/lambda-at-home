@@ -33,6 +33,24 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: console/node_modules
+          key: ${{ runner.os }}-npm-${{ hashFiles('console/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-npm-
+
+      - name: Build Console (required for embedded assets)
+        working-directory: console
+        run: |
+          npm ci
+          npm run build
+
       - name: Check formatting
         run: cd service && cargo fmt --all -- --check
 
@@ -65,12 +83,6 @@ jobs:
             service/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
-
-      - name: Build Console (required for embedded assets)
-        working-directory: console
-        run: |
-          npm ci
-          npm run build
 
       - name: Build (workspace)
         run: |
@@ -121,7 +133,12 @@ jobs:
       - name: Run e2e tests
         run: |
           set -e
+          # Build the server first
+          echo "🔨 Building server binary..."
+          cd service && cargo build --bin lambda-at-home-server
+          
           # Start the server in the background
+          echo "🚀 Starting server..."
           cd service && cargo run --bin lambda-at-home-server &
           SERVER_PID=$!
           
@@ -138,7 +155,7 @@ jobs:
           # Wait for server to start and verify it's running
           echo "⏳ Waiting for server to start..."
           for i in {1..30}; do
-            if curl -s http://localhost:9000/api/healthz > /dev/null 2>&1; then
+            if curl -s http://localhost:9000/healthz > /dev/null 2>&1; then
               echo "✅ Server is ready!"
               break
             fi
