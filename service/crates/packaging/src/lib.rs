@@ -14,7 +14,6 @@ pub use zip_handler::*;
 mod tests {
     use super::*;
     use std::io::Write;
-    use std::path::Path;
     use tempfile::tempdir;
 
     #[test]
