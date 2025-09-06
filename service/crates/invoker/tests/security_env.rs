@@ -58,6 +58,54 @@ impl DockerLike for FakeDocker {
     async fn inspect_running(&self, _container_id: &str) -> anyhow::Result<bool> {
         Ok(*self.running.lock().await)
     }
+    async fn get_docker_stats(&self) -> anyhow::Result<lambda_models::docker::DockerStats> {
+        // Return mock Docker stats for testing
+        Ok(lambda_models::docker::DockerStats {
+            system_info: lambda_models::docker::DockerSystemInfo {
+                containers: 0,
+                containers_running: 0,
+                containers_paused: 0,
+                containers_stopped: 0,
+                images: 0,
+                driver: "overlay2".to_string(),
+                memory_total: 8589934592,
+                memory_available: 4294967296,
+                cpu_count: 4,
+                kernel_version: "5.4.0".to_string(),
+                operating_system: "Docker Desktop".to_string(),
+                architecture: "x86_64".to_string(),
+                docker_root_dir: "/var/lib/docker".to_string(),
+                storage_driver: "overlay2".to_string(),
+                logging_driver: "json-file".to_string(),
+                cgroup_driver: "systemd".to_string(),
+                cgroup_version: "2".to_string(),
+                n_events_listener: 0,
+                n_goroutines: 0,
+                system_time: "2023-01-01T00:00:00Z".to_string(),
+                server_version: "20.10.0".to_string(),
+            },
+            disk_usage: lambda_models::docker::DockerDiskUsage {
+                layers_size: 0,
+                images: vec![],
+                containers: vec![],
+                volumes: vec![],
+                build_cache: vec![],
+            },
+            version: lambda_models::docker::DockerVersion {
+                version: "20.10.0".to_string(),
+                api_version: "1.41".to_string(),
+                min_api_version: "1.12".to_string(),
+                git_commit: "test".to_string(),
+                go_version: "go1.13.15".to_string(),
+                os: "linux".to_string(),
+                arch: "amd64".to_string(),
+                kernel_version: "5.4.0".to_string(),
+                experimental: false,
+                build_time: "2023-01-01T00:00:00Z".to_string(),
+            },
+            cache_stats: None,
+        })
+    }
 }
 
 #[tokio::test]

@@ -3,11 +3,12 @@ use bollard::container::{
     StartContainerOptions, StopContainerOptions,
 };
 use bollard::Docker;
+// Unused imports removed - these types are re-exported by bollard::models
 
 use async_trait::async_trait;
 use bollard::models::{ContainerCreateResponse, HostConfig, RestartPolicy, RestartPolicyNameEnum};
 use futures_util::StreamExt;
-use lambda_models::{Config as AppConfig, Function, LambdaError};
+use lambda_models::{Config as AppConfig, Function, LambdaError, DockerStats, DockerSystemInfo, DockerDiskUsage, DockerVersion as LambdaDockerVersion};
 use std::collections::HashMap;
 use tracing::{error, info, instrument};
 
@@ -53,6 +54,7 @@ pub trait DockerLike: Send + Sync + 'static {
     async fn stop(&self, container_id: &str, timeout_secs: u64) -> anyhow::Result<()>;
     async fn remove(&self, container_id: &str, force: bool) -> anyhow::Result<()>;
     async fn inspect_running(&self, container_id: &str) -> anyhow::Result<bool>;
+    async fn get_docker_stats(&self) -> anyhow::Result<DockerStats>;
 }
 
 pub struct Invoker {
@@ -276,5 +278,124 @@ impl Invoker {
 
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
+    }
+
+    #[instrument(skip(self))]
+    pub async fn get_docker_stats(&self) -> anyhow::Result<DockerStats> {
+        // Get system info
+        let system_info = self.docker.info().await
+            .map_err(|e| anyhow::anyhow!("Failed to get Docker system info: {}", e))?;
+
+        // Get disk usage
+        let disk_usage = self.docker.df().await
+            .map_err(|e| anyhow::anyhow!("Failed to get Docker disk usage: {}", e))?;
+
+        // Get version
+        let version = self.docker.version().await
+            .map_err(|e| anyhow::anyhow!("Failed to get Docker version: {}", e))?;
+
+        // Convert to our models
+        let docker_system_info = DockerSystemInfo {
+            containers: system_info.containers.unwrap_or(0),
+            containers_running: system_info.containers_running.unwrap_or(0),
+            containers_paused: system_info.containers_paused.unwrap_or(0),
+            containers_stopped: system_info.containers_stopped.unwrap_or(0),
+            images: system_info.images.unwrap_or(0),
+            driver: system_info.driver.unwrap_or_default(),
+            memory_total: system_info.mem_total.unwrap_or(0) as u64,
+            memory_available: 0, // Not available in SystemInfo
+            cpu_count: system_info.ncpu.unwrap_or(0),
+            kernel_version: system_info.kernel_version.unwrap_or_default(),
+            operating_system: system_info.operating_system.unwrap_or_default(),
+            architecture: system_info.architecture.unwrap_or_default(),
+            docker_root_dir: system_info.docker_root_dir.unwrap_or_default(),
+            storage_driver: "unknown".to_string(), // Not available in SystemInfo
+            logging_driver: system_info.logging_driver.unwrap_or_default(),
+            cgroup_driver: system_info.cgroup_driver.map(|e| e.to_string()).unwrap_or_default(),
+            cgroup_version: system_info.cgroup_version.map(|e| e.to_string()).unwrap_or_default(),
+            n_events_listener: system_info.n_events_listener.unwrap_or(0),
+            n_goroutines: system_info.n_goroutines.unwrap_or(0),
+            system_time: system_info.system_time.unwrap_or_default(),
+            server_version: system_info.server_version.unwrap_or_default(),
+        };
+
+        let docker_disk_usage = DockerDiskUsage {
+            layers_size: disk_usage.layers_size.unwrap_or(0) as u64,
+            images: disk_usage.images.unwrap_or_default().into_iter().map(|img| {
+                lambda_models::DockerImageUsage {
+                    id: img.id,
+                    parent_id: img.parent_id,
+                    repo_tags: img.repo_tags,
+                    repo_digests: img.repo_digests,
+                    created: img.created,
+                    shared_size: img.shared_size as u64,
+                    size: img.size as u64,
+                    virtual_size: img.virtual_size.unwrap_or(0) as u64,
+                    labels: img.labels,
+                    containers: img.containers,
+                }
+            }).collect(),
+            containers: disk_usage.containers.unwrap_or_default().into_iter().map(|cont| {
+                lambda_models::DockerContainerUsage {
+                    id: cont.id.unwrap_or_default(),
+                    names: cont.names.unwrap_or_default(),
+                    image: cont.image.unwrap_or_default(),
+                    image_id: cont.image_id.unwrap_or_default(),
+                    command: cont.command.unwrap_or_default(),
+                    created: cont.created.unwrap_or(0),
+                    size_rw: cont.size_rw.unwrap_or(0) as u64,
+                    size_root_fs: cont.size_root_fs.unwrap_or(0) as u64,
+                    labels: cont.labels.unwrap_or_default(),
+                    state: cont.state.unwrap_or_default(),
+                    status: cont.status.unwrap_or_default(),
+                }
+            }).collect(),
+            volumes: disk_usage.volumes.unwrap_or_default().into_iter().map(|vol| {
+                lambda_models::DockerVolumeUsage {
+                    name: vol.name,
+                    driver: vol.driver,
+                    mountpoint: vol.mountpoint,
+                    created_at: vol.created_at.unwrap_or_default(),
+                    size: 0, // Not available in Volume
+                    labels: vol.labels,
+                    scope: vol.scope.map(|e| e.to_string()).unwrap_or_default(),
+                    options: vol.options,
+                }
+            }).collect(),
+            build_cache: disk_usage.build_cache.unwrap_or_default().into_iter().map(|cache| {
+                lambda_models::DockerBuildCacheUsage {
+                    id: cache.id.unwrap_or_default(),
+                    parent: cache.parent.unwrap_or_default(),
+                    r#type: cache.typ.map(|e| e.to_string()).unwrap_or_default(),
+                    description: cache.description.unwrap_or_default(),
+                    in_use: cache.in_use.unwrap_or(false),
+                    shared: cache.shared.unwrap_or(false),
+                    size: cache.size.unwrap_or(0) as u64,
+                    created_at: cache.created_at.unwrap_or_default(),
+                    last_used_at: cache.last_used_at,
+                    usage_count: cache.usage_count.unwrap_or(0),
+                }
+            }).collect(),
+        };
+
+        let docker_version = LambdaDockerVersion {
+            version: version.version.unwrap_or_default(),
+            api_version: version.api_version.unwrap_or_default(),
+            min_api_version: version.min_api_version.unwrap_or_default(),
+            git_commit: version.git_commit.unwrap_or_default(),
+            go_version: version.go_version.unwrap_or_default(),
+            os: version.os.unwrap_or_default(),
+            arch: version.arch.unwrap_or_default(),
+            kernel_version: version.kernel_version.unwrap_or_default(),
+            experimental: version.experimental.map(|e| e.to_string() == "true").unwrap_or(false),
+            build_time: version.build_time.unwrap_or_default(),
+        };
+
+        Ok(DockerStats {
+            system_info: docker_system_info,
+            disk_usage: docker_disk_usage,
+            version: docker_version,
+            cache_stats: None, // Will be filled by the caller
+        })
     }
 }

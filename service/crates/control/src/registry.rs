@@ -1,6 +1,7 @@
 use crate::autoscaler::Autoscaler;
 use crate::cache::FunctionCache;
 use crate::concurrency::ConcurrencyManager;
+use crate::execution_tracker::ExecutionTracker;
 use crate::pending::Pending;
 use crate::queues::Queues;
 use crate::scheduler::{run_dispatcher, Scheduler};
@@ -13,7 +14,7 @@ use lambda_models::{
     InvokeResponse, LambdaError, ListAliasesResponse, ListApiRoutesResponse, ListFunctionsResponse,
     ListVersionsResponse, PublishVersionRequest, RoutingConfig, RuntimeError, RuntimeInvocation,
     RuntimeResponse, UpdateAliasRequest, UpdateFunctionCodeRequest,
-    UpdateFunctionConfigurationRequest, Version,
+    UpdateFunctionConfigurationRequest, Version, DockerStats, CacheStats, CacheTypeStats,
 };
 use sqlx::{Row, SqlitePool};
 use std::collections::HashMap;
@@ -32,6 +33,7 @@ pub struct ControlPlane {
     invoker: Arc<lambda_invoker::Invoker>,
     config: lambda_models::Config,
     cache: Arc<FunctionCache>,
+    execution_tracker: ExecutionTracker,
 }
 
 impl ControlPlane {
@@ -63,6 +65,7 @@ impl ControlPlane {
         });
 
         // Spawn autoscaler loop
+        let execution_tracker = ExecutionTracker::new(Arc::new(pool.clone()));
         let control_ref = Arc::new(Self {
             pool: pool.clone(),
             scheduler: Arc::new(scheduler.clone()),
@@ -71,6 +74,7 @@ impl ControlPlane {
             invoker: invoker.clone(),
             config: config.clone(),
             cache: cache.clone(),
+            execution_tracker: execution_tracker.clone(),
         });
         let autoscaler = Autoscaler::new(control_ref.clone());
         tokio::spawn(async move {
@@ -98,6 +102,7 @@ impl ControlPlane {
             invoker,
             config,
             cache,
+            execution_tracker,
         })
     }
 
@@ -843,6 +848,15 @@ impl ControlPlane {
         // 3) Create request ID: req_id = Uuid::new_v4().to_string()
         let req_id = uuid::Uuid::new_v4().to_string();
 
+        // 3.5) Record execution start in database (deferred async)
+        let start_time = chrono::Utc::now();
+        self.execution_tracker.record_execution_start(
+            req_id.clone(),
+            &function,
+            req_id.clone(),
+            start_time,
+        );
+
         // 4) Register pending waiter: let rx = pending.register(req_id.clone())
         let rx = self.scheduler.pending().register(req_id.clone());
 
@@ -1004,6 +1018,11 @@ impl ControlPlane {
             Ok(Err(_canceled)) => {
                 // Runtime channel dropped → 200 with X-Amz-Function-Error: InitError
                 error!("Runtime channel closed for invocation: {}", req_id);
+                
+                // Record init error in execution record (deferred async)
+                let end_time = chrono::Utc::now();
+                self.execution_tracker.record_execution_init_error(req_id.clone(), end_time);
+                
                 Ok(InvokeResponse {
                     status_code: 200,
                     payload: Some(serde_json::json!({
@@ -1027,6 +1046,10 @@ impl ControlPlane {
                     self.scheduler
                         .pending()
                         .fail_if_waiting(&req_id, "Unhandled", timeout_body);
+
+                // Record timeout in execution record (deferred async)
+                let end_time = chrono::Utc::now();
+                self.execution_tracker.record_execution_timeout(req_id.clone(), end_time);
 
                 Ok(InvokeResponse {
                     status_code: 200,
@@ -1124,6 +1147,10 @@ impl ControlPlane {
         // Best-effort: mark some active container back to WarmIdle
         let _ = self.warm_pool.mark_any_active_to_idle().await;
         if success {
+            // Record successful execution completion (deferred async)
+            let end_time = chrono::Utc::now();
+            self.execution_tracker.record_execution_success(request_id.clone(), end_time);
+            
             info!("Successfully completed invocation: {}", request_id);
             Ok(())
         } else {
@@ -1178,6 +1205,14 @@ impl ControlPlane {
         // Best-effort: mark some active container back to WarmIdle
         let _ = self.warm_pool.mark_any_active_to_idle().await;
         if success {
+            // Record failed execution completion (deferred async)
+            let end_time = chrono::Utc::now();
+            self.execution_tracker.record_execution_failure(
+                request_id.clone(),
+                error.error_type.clone(),
+                end_time,
+            );
+            
             info!("Successfully completed error invocation: {}", request_id);
             Ok(())
         } else {
@@ -1498,5 +1533,128 @@ impl ControlPlane {
             }
         }
         Ok(())
+    }
+
+    /// Get comprehensive Docker and cache statistics
+    #[instrument(skip(self))]
+    pub async fn get_docker_stats(&self) -> Result<DockerStats, LambdaError> {
+        // Get Docker stats from invoker
+        let mut docker_stats = self.invoker.get_docker_stats().await
+            .map_err(|e| LambdaError::DockerError {
+                message: format!("Failed to get Docker stats: {}", e),
+            })?;
+
+        // Get cache stats
+        let cache_stats = self.cache.get_stats();
+        let cache_sizes = self.cache.get_sizes();
+
+        // Convert cache stats to our model
+        let cache_stats_model = CacheStats {
+            functions: CacheTypeStats {
+                hits: cache_stats.get("functions").map(|s| s.hits).unwrap_or(0),
+                misses: cache_stats.get("functions").map(|s| s.misses).unwrap_or(0),
+                evictions: cache_stats.get("functions").map(|s| s.evictions).unwrap_or(0),
+                invalidations: cache_stats.get("functions").map(|s| s.invalidations).unwrap_or(0),
+                hit_rate: cache_stats.get("functions").map(|s| s.hit_rate()).unwrap_or(0.0),
+                size: cache_sizes.get("functions").copied().unwrap_or(0),
+            },
+            concurrency: CacheTypeStats {
+                hits: cache_stats.get("concurrency").map(|s| s.hits).unwrap_or(0),
+                misses: cache_stats.get("concurrency").map(|s| s.misses).unwrap_or(0),
+                evictions: cache_stats.get("concurrency").map(|s| s.evictions).unwrap_or(0),
+                invalidations: cache_stats.get("concurrency").map(|s| s.invalidations).unwrap_or(0),
+                hit_rate: cache_stats.get("concurrency").map(|s| s.hit_rate()).unwrap_or(0.0),
+                size: cache_sizes.get("concurrency").copied().unwrap_or(0),
+            },
+            env_vars: CacheTypeStats {
+                hits: cache_stats.get("env_vars").map(|s| s.hits).unwrap_or(0),
+                misses: cache_stats.get("env_vars").map(|s| s.misses).unwrap_or(0),
+                evictions: cache_stats.get("env_vars").map(|s| s.evictions).unwrap_or(0),
+                invalidations: cache_stats.get("env_vars").map(|s| s.invalidations).unwrap_or(0),
+                hit_rate: cache_stats.get("env_vars").map(|s| s.hit_rate()).unwrap_or(0.0),
+                size: cache_sizes.get("env_vars").copied().unwrap_or(0),
+            },
+            secrets: CacheTypeStats {
+                hits: cache_stats.get("secrets").map(|s| s.hits).unwrap_or(0),
+                misses: cache_stats.get("secrets").map(|s| s.misses).unwrap_or(0),
+                evictions: cache_stats.get("secrets").map(|s| s.evictions).unwrap_or(0),
+                invalidations: cache_stats.get("secrets").map(|s| s.invalidations).unwrap_or(0),
+                hit_rate: cache_stats.get("secrets").map(|s| s.hit_rate()).unwrap_or(0.0),
+                size: cache_sizes.get("secrets").copied().unwrap_or(0),
+            },
+        };
+
+        // Add cache stats to Docker stats
+        docker_stats.cache_stats = Some(cache_stats_model);
+
+        Ok(docker_stats)
+    }
+
+    /// Get Lambda service statistics
+    #[instrument(skip(self))]
+    pub async fn get_lambda_service_stats(&self) -> anyhow::Result<lambda_models::LambdaServiceStats> {
+        // Get function statistics from database
+        let function_rows = sqlx::query(
+            "SELECT state, memory_size FROM functions ORDER BY last_modified DESC"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        // Get warm pool statistics
+        let total_containers = self.warm_pool.total_container_count().await;
+        let active_containers = 0; // TODO: Implement active container counting
+        let idle_containers = total_containers - active_containers;
+
+        // Calculate totals
+        let total_functions = function_rows.len() as u64;
+        let active_functions = function_rows.iter().filter(|row| row.get::<String, _>("state") == "\"Active\"").count() as u64;
+        let stopped_functions = function_rows.iter().filter(|row| row.get::<String, _>("state") == "\"Inactive\"").count() as u64;
+        let failed_functions = function_rows.iter().filter(|row| row.get::<String, _>("state") == "\"Failed\"").count() as u64;
+
+        // Calculate total memory and CPU allocation
+        let total_memory_mb: u64 = function_rows.iter()
+            .filter(|row| row.get::<String, _>("state") == "\"Active\"")
+            .map(|row| row.get::<i64, _>("memory_size") as u64)
+            .sum();
+
+        let total_cpu_cores: u64 = function_rows.iter()
+            .filter(|row| row.get::<String, _>("state") == "\"Active\"")
+            .map(|row| (row.get::<i64, _>("memory_size") as f64 / 1024.0).ceil() as u64) // Rough estimate: 1 CPU core per 1GB memory
+            .sum();
+
+        // Get execution statistics
+        let execution_stats = sqlx::query(
+            "SELECT 
+                COUNT(*) as total_invocations,
+                COUNT(CASE WHEN error_type IS NULL THEN 1 END) as successful_invocations,
+                COUNT(CASE WHEN error_type IS NOT NULL THEN 1 END) as failed_invocations,
+                AVG(CAST(duration_ms AS REAL)) as avg_duration_ms,
+                MAX(CAST(duration_ms AS REAL)) as max_duration_ms,
+                MIN(CAST(duration_ms AS REAL)) as min_duration_ms
+            FROM executions 
+            WHERE start_time > datetime('now', '-24 hours')"
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        let stats = lambda_models::LambdaServiceStats {
+            total_functions,
+            active_functions,
+            stopped_functions,
+            failed_functions,
+            total_memory_mb,
+            total_cpu_cores,
+            warm_containers: total_containers as u64,
+            active_containers: active_containers as u64,
+            idle_containers: idle_containers as u64,
+            total_invocations_24h: execution_stats.get::<i64, _>("total_invocations") as u64,
+            successful_invocations_24h: execution_stats.get::<i64, _>("successful_invocations") as u64,
+            failed_invocations_24h: execution_stats.get::<i64, _>("failed_invocations") as u64,
+            avg_duration_ms: execution_stats.get::<Option<f64>, _>("avg_duration_ms").unwrap_or(0.0),
+            max_duration_ms: execution_stats.get::<Option<f64>, _>("max_duration_ms").unwrap_or(0.0),
+            min_duration_ms: execution_stats.get::<Option<f64>, _>("min_duration_ms").unwrap_or(0.0),
+        };
+
+        Ok(stats)
     }
 }

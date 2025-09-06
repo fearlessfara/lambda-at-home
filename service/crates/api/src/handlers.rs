@@ -601,6 +601,12 @@ pub async fn api_gateway_proxy(
 ) -> impl IntoResponse {
     let uri = req.uri().clone();
     let path = uri.path().to_string();
+    
+    // Skip API routes that should be handled by explicit routes
+    if path.starts_with("/api/") || path.starts_with("/admin/") || path.starts_with("/healthz") || path.starts_with("/metrics") {
+        return (StatusCode::NOT_FOUND, Body::from("Not Found")).into_response();
+    }
+    
     let mut segs = path.trim_start_matches('/').split('/');
     // First try to resolve via configured API routes (longest prefix, optional method)
     let method_str = req.method().to_string();
@@ -763,6 +769,43 @@ pub async fn api_gateway_proxy(
             let status =
                 StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
             (status, Json(e.to_error_shape())).into_response()
+        }
+    }
+}
+
+#[instrument(skip(state))]
+pub async fn get_docker_stats(State(state): State<AppState>) -> impl IntoResponse {
+    match state.control.get_docker_stats().await {
+        Ok(stats) => {
+            info!("Successfully retrieved Docker statistics");
+            Json(stats).into_response()
+        }
+        Err(e) => {
+            error!("Failed to get Docker stats: {}", e);
+            let status =
+                StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            (status, Json(e.to_error_shape())).into_response()
+        }
+    }
+}
+
+#[instrument(skip(state))]
+pub async fn get_lambda_service_stats(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    match state.control.get_lambda_service_stats().await {
+        Ok(stats) => {
+            info!("Successfully retrieved Lambda service statistics");
+            Json(stats).into_response()
+        }
+        Err(e) => {
+            error!("Failed to get Lambda service stats: {}", e);
+            let error_shape = ErrorShape {
+                error_message: e.to_string(),
+                error_type: "InternalError".to_string(),
+                stack_trace: None,
+            };
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(error_shape)).into_response()
         }
     }
 }

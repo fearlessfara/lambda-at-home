@@ -25,15 +25,6 @@ impl<T> CacheEntry<T> {
     fn is_expired(&self) -> bool {
         self.created_at.elapsed() > self.ttl
     }
-
-    fn remaining_ttl(&self) -> Duration {
-        let elapsed = self.created_at.elapsed();
-        if elapsed >= self.ttl {
-            Duration::ZERO
-        } else {
-            self.ttl - elapsed
-        }
-    }
 }
 
 /// Cache statistics for monitoring

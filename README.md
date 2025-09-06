@@ -125,13 +125,14 @@ curl -sS -X POST http://127.0.0.1:9000/2015-03-31/functions/echo/invocations \
 
 ## Configuration
 
-Configuration is managed via `configs/default.toml`:
+Configuration is managed via `service/configs/default.toml` (or `configs/default.toml`). Missing or invalid files fall back to sensible defaults:
 
 ```toml
 [server]
 bind = "127.0.0.1"
 port_user_api = 9000
 port_runtime_api = 9001
+max_request_body_size_mb = 50
 
 [data]
 dir = "data"
@@ -222,7 +223,7 @@ Admin endpoints for routes:
 - **No new privileges**: Containers cannot gain new privileges
 - **Resource limits**: Memory, CPU, and process limits enforced
 - **Tmpfs for /tmp**: Temporary directory with size limits
-- **Network isolation**: Containers run in isolated networks
+- **Host-gateway mapping only**: Containers use default Docker networking with `host.docker.internal` for Runtime API access
 
 ## Development
 
@@ -230,21 +231,23 @@ Admin endpoints for routes:
 
 ```
 lambda@home/
-├── crates/
-│   ├── api/           # User API (AWS Lambda compatible)
-│   ├── runtime_api/   # Runtime API (for containers)
-│   ├── control/       # Control plane (registry, scheduler)
-│   ├── invoker/       # Docker container management
-│   ├── packaging/     # ZIP processing and image building
-│   ├── models/        # Shared data models
-│   ├── metrics/       # Metrics and logging
-│   └── cli/           # Command-line tools
-├── console/           # Web console (Vite + React)
-├── runtimes/          # Runtime Dockerfiles and bootstrap scripts
-├── examples/          # Example functions
-├── configs/           # Configuration files
-├── e2e/              # End-to-end test suite (Jest)
-└── data/              # DB and cache (gitignored)
+├── service/
+│   ├── src/bin/lambda-at-home-server.rs   # Server entrypoint
+│   ├── crates/
+│   │   ├── api/           # User API (AWS Lambda compatible)
+│   │   ├── runtime_api/   # Runtime API (for containers)
+│   │   ├── control/       # Control plane (registry, scheduler, warm pool)
+│   │   ├── invoker/       # Docker container lifecycle
+│   │   ├── packaging/     # ZIP processing and image build/cache
+│   │   ├── models/        # Shared data models
+│   │   ├── metrics/       # Prometheus + tracing
+│   │   └── cli/           # CLI utilities
+│   ├── configs/           # Default config (e.g., default.toml)
+│   └── runtimes/          # Runtime bootstraps (nodejs18/22, python311, rust)
+├── console/               # Web console (Vite + React)
+├── e2e/                   # End-to-end tests (Jest/Node)
+├── examples/              # Example functions
+└── Makefile               # Common dev/test targets
 ```
 
 ### Running tests

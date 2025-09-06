@@ -1,6 +1,7 @@
 pub mod autoscaler;
 pub mod cache;
 pub mod concurrency;
+pub mod execution_tracker;
 pub mod idle_watchdog;
 pub mod pending;
 pub mod queues;
@@ -12,6 +13,7 @@ pub mod work_item;
 pub use autoscaler::*;
 pub use cache::*;
 pub use concurrency::*;
+pub use execution_tracker::*;
 pub use idle_watchdog::*;
 pub use pending::*;
 pub use queues::*;

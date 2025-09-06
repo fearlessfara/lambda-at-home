@@ -61,6 +61,8 @@ pub fn create_router() -> Router<AppState> {
         // Health and metrics
         .route("/healthz", get(health_check))
         .route("/metrics", get(metrics))
+        .route("/docker-stats", get(get_docker_stats))
+        .route("/lambda-service-stats", get(get_lambda_service_stats))
         // Warm pool admin
         .route("/admin/warm-pool/:name", get(warm_pool_summary))
         // API Gateway routes admin

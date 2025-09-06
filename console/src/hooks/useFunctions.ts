@@ -59,6 +59,24 @@ export function useHealthCheck() {
   });
 }
 
+export function useDockerStats() {
+  return useQuery({
+    queryKey: ['docker-stats'],
+    queryFn: () => api.getDockerStats(),
+    refetchInterval: 10000, // Refetch every 10 seconds
+    retry: 3,
+  });
+}
+
+export function useLambdaServiceStats() {
+  return useQuery({
+    queryKey: ['lambda-service-stats'],
+    queryFn: () => api.getLambdaServiceStats(),
+    refetchInterval: 10000, // Refetch every 10 seconds
+    retry: 3,
+  });
+}
+
 
 export function useUpdateFunctionConfiguration() {
   const queryClient = useQueryClient();

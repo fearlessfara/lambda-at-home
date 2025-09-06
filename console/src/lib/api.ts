@@ -2,7 +2,9 @@ import {
   Function, 
   CreateFunctionRequest, 
   ListFunctionsResponse,
-  ErrorShape 
+  ErrorShape,
+  DockerStats,
+  LambdaServiceStats
 } from '../types/api';
 
 // Default to relative /api when served behind the same origin; override via VITE_API_URL in dev
@@ -241,6 +243,18 @@ export const api = {
       throw new ApiError(`Health check failed: ${response.status}`, response.status);
     }
     return response.text();
+  },
+
+  // Docker statistics
+  async getDockerStats(): Promise<DockerStats> {
+    const response = await fetch(`${API_BASE_URL}/docker-stats`);
+    return handleResponse(response);
+  },
+
+  // Lambda service statistics
+  async getLambdaServiceStats(): Promise<LambdaServiceStats> {
+    const response = await fetch(`${API_BASE_URL}/lambda-service-stats`);
+    return handleResponse(response);
   },
 };
 
