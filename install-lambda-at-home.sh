@@ -224,6 +224,86 @@ install_binary() {
     fi
 }
 
+# Function to prompt user for configuration
+prompt_config() {
+    print_status "Lambda@Home Configuration Setup"
+    echo
+    
+    # Default values
+    local default_data_dir="data"
+    local default_bind="127.0.0.1"
+    local default_user_api_port="9000"
+    local default_runtime_api_port="9001"
+    local default_memory_mb="512"
+    local default_timeout_ms="3000"
+    local default_tmp_mb="512"
+    local default_soft_idle_ms="45000"
+    local default_hard_idle_ms="300000"
+    local default_max_concurrency="256"
+    
+    # Prompt for data directory
+    echo -n "Data directory (default: $default_data_dir): "
+    read -r data_dir
+    data_dir=${data_dir:-$default_data_dir}
+    
+    # Prompt for bind address
+    echo -n "Server bind address (default: $default_bind): "
+    read -r bind_address
+    bind_address=${bind_address:-$default_bind}
+    
+    # Prompt for ports
+    echo -n "User API port (default: $default_user_api_port): "
+    read -r user_api_port
+    user_api_port=${user_api_port:-$default_user_api_port}
+    
+    echo -n "Runtime API port (default: $default_runtime_api_port): "
+    read -r runtime_api_port
+    runtime_api_port=${runtime_api_port:-$default_runtime_api_port}
+    
+    # Prompt for function defaults
+    echo -n "Default memory (MB) (default: $default_memory_mb): "
+    read -r memory_mb
+    memory_mb=${memory_mb:-$default_memory_mb}
+    
+    echo -n "Default timeout (ms) (default: $default_timeout_ms): "
+    read -r timeout_ms
+    timeout_ms=${timeout_ms:-$default_timeout_ms}
+    
+    echo -n "Default tmp size (MB) (default: $default_tmp_mb): "
+    read -r tmp_mb
+    tmp_mb=${tmp_mb:-$default_tmp_mb}
+    
+    # Prompt for idle settings
+    echo -n "Soft idle timeout (ms) (default: $default_soft_idle_ms): "
+    read -r soft_idle_ms
+    soft_idle_ms=${soft_idle_ms:-$default_soft_idle_ms}
+    
+    echo -n "Hard idle timeout (ms) (default: $default_hard_idle_ms): "
+    read -r hard_idle_ms
+    hard_idle_ms=${hard_idle_ms:-$default_hard_idle_ms}
+    
+    # Prompt for concurrency
+    echo -n "Max global concurrency (default: $default_max_concurrency): "
+    read -r max_concurrency
+    max_concurrency=${max_concurrency:-$default_max_concurrency}
+    
+    # Store values in global variables
+    CONFIG_DATA_DIR="$data_dir"
+    CONFIG_BIND="$bind_address"
+    CONFIG_USER_API_PORT="$user_api_port"
+    CONFIG_RUNTIME_API_PORT="$runtime_api_port"
+    CONFIG_MEMORY_MB="$memory_mb"
+    CONFIG_TIMEOUT_MS="$timeout_ms"
+    CONFIG_TMP_MB="$tmp_mb"
+    CONFIG_SOFT_IDLE_MS="$soft_idle_ms"
+    CONFIG_HARD_IDLE_MS="$hard_idle_ms"
+    CONFIG_MAX_CONCURRENCY="$max_concurrency"
+    
+    echo
+    print_success "Configuration saved!"
+    echo
+}
+
 # Function to create data directory and config
 setup_data_directory() {
     local data_dir="$HOME/.lambda-at-home"
@@ -241,31 +321,31 @@ setup_data_directory() {
     
     # Create default config if it doesn't exist
     if [[ ! -f "$data_dir/config/config.toml" ]]; then
-        cat > "$data_dir/config/config.toml" << 'EOF'
+        cat > "$data_dir/config/config.toml" << EOF
 [server]
-bind = "127.0.0.1"
-port_user_api = 9000
-port_runtime_api = 9001
+bind = "${CONFIG_BIND:-127.0.0.1}"
+port_user_api = ${CONFIG_USER_API_PORT:-9000}
+port_runtime_api = ${CONFIG_RUNTIME_API_PORT:-9001}
 max_request_body_size_mb = 50
 
 [data]
-dir = "data"
-db_url = "sqlite:data/lhome.db"
+dir = "${CONFIG_DATA_DIR:-data}"
+db_url = "sqlite:${CONFIG_DATA_DIR:-data}/lhome.db"
 
 [docker]
 host = ""
 
 [defaults]
-memory_mb = 512
-timeout_ms = 3000
-tmp_mb = 512
+memory_mb = ${CONFIG_MEMORY_MB:-512}
+timeout_ms = ${CONFIG_TIMEOUT_MS:-3000}
+tmp_mb = ${CONFIG_TMP_MB:-512}
 
 [idle]
-soft_ms = 45000   # stop container
-hard_ms = 300000  # rm container
+soft_ms = ${CONFIG_SOFT_IDLE_MS:-45000}   # stop container
+hard_ms = ${CONFIG_HARD_IDLE_MS:-300000}  # rm container
 
 [limits]
-max_global_concurrency = 256
+max_global_concurrency = ${CONFIG_MAX_CONCURRENCY:-256}
 EOF
         print_success "Created default configuration at $data_dir/config/config.toml"
     fi
@@ -313,31 +393,31 @@ setup_local_directory() {
     print_success "Created database file at data/lhome.db"
     
     # Create default config
-    cat > "config/config.toml" << 'EOF'
+    cat > "config/config.toml" << EOF
 [server]
-bind = "127.0.0.1"
-port_user_api = 9000
-port_runtime_api = 9001
+bind = "${CONFIG_BIND:-127.0.0.1}"
+port_user_api = ${CONFIG_USER_API_PORT:-9000}
+port_runtime_api = ${CONFIG_RUNTIME_API_PORT:-9001}
 max_request_body_size_mb = 50
 
 [data]
-dir = "data"
-db_url = "sqlite:data/lhome.db"
+dir = "${CONFIG_DATA_DIR:-data}"
+db_url = "sqlite:${CONFIG_DATA_DIR:-data}/lhome.db"
 
 [docker]
 host = ""
 
 [defaults]
-memory_mb = 512
-timeout_ms = 3000
-tmp_mb = 512
+memory_mb = ${CONFIG_MEMORY_MB:-512}
+timeout_ms = ${CONFIG_TIMEOUT_MS:-3000}
+tmp_mb = ${CONFIG_TMP_MB:-512}
 
 [idle]
-soft_ms = 45000   # stop container
-hard_ms = 300000  # rm container
+soft_ms = ${CONFIG_SOFT_IDLE_MS:-45000}   # stop container
+hard_ms = ${CONFIG_HARD_IDLE_MS:-300000}  # rm container
 
 [limits]
-max_global_concurrency = 256
+max_global_concurrency = ${CONFIG_MAX_CONCURRENCY:-256}
 EOF
     print_success "Created default configuration at config/config.toml"
     
@@ -431,6 +511,9 @@ main() {
     
     # Check prerequisites
     check_prerequisites
+    
+    # Interactive configuration
+    prompt_config
     
     # Get latest version
     print_status "Fetching latest version..."

@@ -69,10 +69,27 @@ async fn main() -> Result<()> {
         config.data.db_url.clone()
     };
 
-    if let Some(db_path) = db_url.strip_prefix("sqlite://") {
+    // Handle both sqlite:// and sqlite: formats
+    let db_path = if let Some(path) = db_url.strip_prefix("sqlite://") {
+        Some(path)
+    } else if let Some(path) = db_url.strip_prefix("sqlite:") {
+        Some(path)
+    } else {
+        None
+    };
+
+    if let Some(db_path) = db_path {
         if let Some(parent) = Path::new(db_path).parent() {
             if let Err(e) = fs::create_dir_all(parent) {
                 warn!("Failed to create DB parent directory {:?}: {}", parent, e);
+            }
+        }
+        // Create the database file if it doesn't exist
+        if !Path::new(db_path).exists() {
+            if let Err(e) = fs::File::create(db_path) {
+                warn!("Failed to create database file {:?}: {}", db_path, e);
+            } else {
+                info!("Created database file: {}", db_path);
             }
         }
     }

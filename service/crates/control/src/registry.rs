@@ -2,6 +2,7 @@ use crate::autoscaler::Autoscaler;
 use crate::cache::FunctionCache;
 use crate::concurrency::ConcurrencyManager;
 use crate::execution_tracker::ExecutionTracker;
+use crate::migrations;
 use crate::pending::Pending;
 use crate::queues::Queues;
 use crate::scheduler::{run_dispatcher, Scheduler};
@@ -42,9 +43,8 @@ impl ControlPlane {
         invoker: Arc<lambda_invoker::Invoker>,
         config: lambda_models::Config,
     ) -> Result<Self, LambdaError> {
-        // Run migrations
-        sqlx::migrate!("./migrations")
-            .run(&pool)
+        // Run embedded migrations
+        migrations::run_migrations(&pool)
             .await
             .map_err(|e| LambdaError::DatabaseError {
                 reason: e.to_string(),
