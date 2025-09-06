@@ -101,8 +101,17 @@ jobs:
             final_name="lambda-at-home-server-${{ github.ref_name }}-${{ matrix.platform }}"
           fi
           
+          # Check if binary exists
+          binary_path="service/target/release/${binary_name}"
+          if [[ ! -f "$binary_path" ]]; then
+            echo "❌ Binary not found at: $binary_path"
+            echo "📁 Contents of service/target/release/:"
+            ls -la service/target/release/ || echo "Directory does not exist"
+            exit 1
+          fi
+          
           # Copy binary with platform-specific naming
-          cp "service/target/release/${binary_name}" "release-assets/${final_name}"
+          cp "$binary_path" "release-assets/${final_name}"
           
           # Make executable (Unix only)
           if [[ "${{ runner.os }}" != "Windows" ]]; then
