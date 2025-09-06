@@ -212,7 +212,6 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: Lambda@Home ${{ github.ref_name }}
-          overwrite: true
           generate_release_notes: false
           body: |
             ## Lambda@Home ${{ github.ref_name }}
