@@ -101,15 +101,11 @@ download_binary() {
         fi
     fi
     
-    # If download failed, try fallback to x86_64 for ARM platforms
-    if [[ "$download_success" == false ]] && [[ "$platform" == *"arm64"* ]]; then
-        print_warning "ARM64 binary not available, trying x86_64 fallback..."
-        local fallback_platform="${platform/arm64/x86_64}"
+    # If download failed, try fallback to x86_64 for macOS ARM64 (Rosetta compatibility)
+    if [[ "$download_success" == false ]] && [[ "$platform" == "macos-arm64" ]]; then
+        print_warning "ARM64 binary not available, trying x86_64 fallback for macOS (Rosetta compatibility)..."
+        local fallback_platform="macos-x86_64"
         local fallback_url="https://github.com/fearlessfara/lambda-at-home/releases/download/${version}/lambda-at-home-server-${version}-${fallback_platform}"
-        
-        if [[ "$platform" == *"windows"* ]]; then
-            fallback_url="${fallback_url}.exe"
-        fi
         
         print_status "Trying fallback URL: ${fallback_url}"
         
@@ -129,8 +125,8 @@ download_binary() {
     if [[ "$download_success" == false ]]; then
         print_error "Failed to download binary"
         print_error "Tried URL: ${download_url}"
-        if [[ "$platform" == *"arm64"* ]]; then
-            print_error "Also tried x86_64 fallback"
+        if [[ "$platform" == "macos-arm64" ]]; then
+            print_error "Also tried x86_64 fallback for macOS (Rosetta compatibility)"
         fi
         exit 1
     fi
