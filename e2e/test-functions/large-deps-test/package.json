@@ -1,0 +1,13 @@
+{
+  "name": "lambda-large-deps-test",
+  "version": "1.0.0",
+  "description": "Lambda function with multiple dependencies for testing large uploads",
+  "main": "index.js",
+  "dependencies": {
+    "lodash": "^4.17.21",
+    "moment": "^2.29.1",
+    "uuid": "^9.0.1",
+    "axios": "^1.6.0",
+    "validator": "^13.11.0"
+  }
+}

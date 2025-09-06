@@ -17,6 +17,7 @@ pub struct ServerConfig {
     pub bind: String,
     pub port_user_api: u16,
     pub port_runtime_api: u16,
+    pub max_request_body_size_mb: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -60,6 +61,7 @@ impl Default for Config {
                 bind: "127.0.0.1".to_string(),
                 port_user_api: 9000,
                 port_runtime_api: 9001,
+                max_request_body_size_mb: 50, // 50MB default limit
             },
             data: DataConfig {
                 dir: "data".to_string(),

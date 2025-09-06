@@ -28,6 +28,10 @@ e2e/test-results/
 e2e/*.log
 e2e/.nyc_output/
 
+# Test function dependencies
+e2e/test-functions/*/node_modules/
+e2e/test-functions/*-temp.zip
+
 # Test artifacts
 test-results/
 coverage/

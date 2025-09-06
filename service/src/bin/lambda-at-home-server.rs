@@ -130,9 +130,10 @@ async fn main() -> Result<()> {
         let control_plane = control_plane.clone();
         let metrics = metrics.clone();
         let bind = bind_addr.clone();
+        let config = config.clone();
         tokio::spawn(async move {
             if let Err(e) =
-                lambda_api::start_server(bind, user_api_port, control_plane, metrics).await
+                lambda_api::start_server(bind, user_api_port, control_plane, metrics, config).await
             {
                 warn!("User API server error: {}", e);
             }

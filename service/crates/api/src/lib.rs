@@ -11,6 +11,7 @@ pub use state::*;
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::IntoResponse;
 use axum::{routing::get, Router};
+use axum::extract::DefaultBodyLimit;
 use lambda_control::ControlPlane;
 use lambda_invoker::Invoker;
 use lambda_metrics::MetricsService;
@@ -71,9 +72,9 @@ pub async fn start_server(
     port: u16,
     control_plane: Arc<ControlPlane>,
     metrics: Arc<MetricsService>,
+    config: Config,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Create a minimal config for the packaging service
-    let config = Config::default();
+    // Use the provided config
     let invoker = Arc::new(Invoker::new(config.clone()).await?);
     let packaging = Arc::new(PackagingService::new(config.clone()));
 
@@ -87,6 +88,10 @@ pub async fn start_server(
 
     // Build API (AWS-compatible) under /api
     let api = build_router(app_state.clone());
+    
+    // Calculate body size limit in bytes
+    let body_size_limit = (app_state.config.server.max_request_body_size_mb * 1024 * 1024) as usize;
+    
     let app = Router::new()
         .nest("/api", api)
         // Serve embedded SPA at root with fallback
@@ -102,7 +107,8 @@ pub async fn start_server(
         .layer(
             ServiceBuilder::new()
                 .layer(TraceLayer::new_for_http())
-                .layer(CorsLayer::permissive()),
+                .layer(CorsLayer::permissive())
+                .layer(DefaultBodyLimit::max(body_size_limit)),
         );
 
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", bind, port)).await?;

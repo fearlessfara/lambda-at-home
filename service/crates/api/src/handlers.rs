@@ -18,7 +18,7 @@ use lambda_models::{
 use std::collections::HashMap;
 use tracing::{error, info, instrument};
 
-#[instrument(skip(state))]
+#[instrument(skip(state, payload))]
 pub async fn create_function(
     State(state): State<AppState>,
     Json(payload): Json<CreateFunctionRequest>,
@@ -108,7 +108,7 @@ pub async fn list_functions(
     }
 }
 
-#[instrument(skip(state))]
+#[instrument(skip(state, payload))]
 pub async fn update_function_code(
     State(state): State<AppState>,
     Path(name): Path<String>,
@@ -129,7 +129,7 @@ pub async fn update_function_code(
     }
 }
 
-#[instrument(skip(state))]
+#[instrument(skip(state, payload))]
 pub async fn update_function_configuration(
     State(state): State<AppState>,
     Path(name): Path<String>,
@@ -157,7 +157,7 @@ pub async fn update_function_configuration(
     }
 }
 
-#[instrument(skip(state))]
+#[instrument(skip(state, payload))]
 pub async fn publish_version(
     State(state): State<AppState>,
     Path(name): Path<String>,
@@ -200,7 +200,7 @@ pub async fn list_versions(
     }
 }
 
-#[instrument(skip(state))]
+#[instrument(skip(state, payload))]
 pub async fn create_alias(
     State(state): State<AppState>,
     Path(name): Path<String>,
@@ -241,7 +241,7 @@ pub async fn get_alias(
     }
 }
 
-#[instrument(skip(state))]
+#[instrument(skip(state, payload))]
 pub async fn update_alias(
     State(state): State<AppState>,
     Path((name, alias)): Path<(String, String)>,
@@ -302,7 +302,7 @@ pub async fn list_secrets(
     }
 }
 
-#[instrument(skip(state))]
+#[instrument(skip(state, payload))]
 pub async fn create_secret(
     State(state): State<AppState>,
     Json(payload): Json<CreateSecretRequest>,
@@ -551,7 +551,7 @@ pub async fn list_api_routes(
     }
 }
 
-#[instrument(skip(state))]
+#[instrument(skip(state, payload))]
 pub async fn create_api_route(
     State(state): State<AppState>,
     Json(payload): Json<CreateApiRouteRequest>,

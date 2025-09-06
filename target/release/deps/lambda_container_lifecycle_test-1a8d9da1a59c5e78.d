@@ -1,5 +1,0 @@
-/Users/christiangennarofaraone/projects/lambda@home/target/release/deps/lambda_container_lifecycle_test-1a8d9da1a59c5e78.d: tests/lambda_container_lifecycle_test.rs
-
-/Users/christiangennarofaraone/projects/lambda@home/target/release/deps/lambda_container_lifecycle_test-1a8d9da1a59c5e78: tests/lambda_container_lifecycle_test.rs
-
-tests/lambda_container_lifecycle_test.rs:

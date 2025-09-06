@@ -1,0 +1,9 @@
+{
+  "name": "lambda-deps-test",
+  "version": "1.0.0",
+  "description": "Lambda function with uuid dependency for e2e testing",
+  "main": "index.js",
+  "dependencies": {
+    "uuid": "^9.0.1"
+  }
+}

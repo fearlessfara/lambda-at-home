@@ -209,7 +209,7 @@ impl ControlPlane {
         Ok(best.map(|(_, f)| f))
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self, request))]
     pub async fn create_function(
         &self,
         request: CreateFunctionRequest,
@@ -378,7 +378,7 @@ impl ControlPlane {
         })
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self, request))]
     pub async fn update_function_code(
         &self,
         name: &str,
@@ -398,7 +398,7 @@ impl ControlPlane {
         Ok(function)
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self, request))]
     pub async fn update_function_configuration(
         &self,
         name: &str,
@@ -462,7 +462,7 @@ impl ControlPlane {
         Ok(function)
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self, request))]
     pub async fn publish_version(
         &self,
         name: &str,
@@ -540,7 +540,7 @@ impl ControlPlane {
         })
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self, request))]
     pub async fn create_alias(
         &self,
         name: &str,
@@ -756,7 +756,7 @@ impl ControlPlane {
         Ok(())
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self, request))]
     pub async fn invoke_function(
         &self,
         request: InvokeRequest,

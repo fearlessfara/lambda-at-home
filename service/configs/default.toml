@@ -2,6 +2,7 @@
 bind = "127.0.0.1"
 port_user_api = 9000
 port_runtime_api = 9001
+max_request_body_size_mb = 50  # Maximum request body size in MB
 
 [data]
 dir = "service/data"
