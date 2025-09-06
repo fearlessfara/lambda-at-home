@@ -1,4 +1,5 @@
 use crate::autoscaler::Autoscaler;
+use crate::cache::FunctionCache;
 use crate::concurrency::ConcurrencyManager;
 use crate::pending::Pending;
 use crate::queues::Queues;
@@ -30,6 +31,7 @@ pub struct ControlPlane {
     concurrency_manager: Arc<ConcurrencyManager>,
     invoker: Arc<lambda_invoker::Invoker>,
     config: lambda_models::Config,
+    cache: Arc<FunctionCache>,
 }
 
 impl ControlPlane {
@@ -49,6 +51,10 @@ impl ControlPlane {
         let (scheduler, rx) = Scheduler::new();
         let warm_pool = Arc::new(WarmPool::new());
         let concurrency_manager = Arc::new(ConcurrencyManager::new());
+        
+        // Initialize cache with configurable TTL (default 5 minutes)
+        let cache_ttl = std::time::Duration::from_secs(300);
+        let cache = Arc::new(FunctionCache::new(cache_ttl, 1000));
 
         // Spawn the dispatcher task
         let queues = scheduler.queues();
@@ -64,10 +70,24 @@ impl ControlPlane {
             concurrency_manager: concurrency_manager.clone(),
             invoker: invoker.clone(),
             config: config.clone(),
+            cache: cache.clone(),
         });
         let autoscaler = Autoscaler::new(control_ref.clone());
         tokio::spawn(async move {
             autoscaler.start().await;
+        });
+
+        // Start cache cleanup task
+        let cache_cleanup = cache.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                let cleaned = cache_cleanup.cleanup_expired();
+                if cleaned > 0 {
+                    debug!("Cache cleanup: removed {} expired entries", cleaned);
+                }
+            }
         });
 
         Ok(Self {
@@ -77,6 +97,7 @@ impl ControlPlane {
             concurrency_manager,
             invoker,
             config,
+            cache,
         })
     }
 
@@ -317,6 +338,12 @@ impl ControlPlane {
 
     #[instrument(skip(self))]
     pub async fn get_function(&self, name: &str) -> Result<Function, LambdaError> {
+        // Try cache first
+        if let Some(cached_function) = self.cache.get_function(name) {
+            return Ok((*cached_function).clone());
+        }
+
+        // Cache miss - fetch from database
         let row = sqlx::query("SELECT * FROM functions WHERE function_name = ?")
             .bind(name)
             .fetch_optional(&self.pool)
@@ -326,11 +353,19 @@ impl ControlPlane {
                 function_name: name.to_string(),
             })?;
 
-        Ok(self.row_to_function(&row)?)
+        let function = self.row_to_function(&row)?;
+        
+        // Cache the result
+        self.cache.set_function(name.to_string(), function.clone());
+        
+        Ok(function)
     }
 
     #[instrument(skip(self))]
     pub async fn delete_function(&self, name: &str) -> Result<(), LambdaError> {
+        // Get function first to get function_id for cache invalidation
+        let function = self.get_function(name).await.ok();
+        
         let result = sqlx::query("DELETE FROM functions WHERE function_name = ?")
             .bind(name)
             .execute(&self.pool)
@@ -341,6 +376,13 @@ impl ControlPlane {
             return Err(LambdaError::FunctionNotFound {
                 function_name: name.to_string(),
             });
+        }
+
+        // Invalidate cache
+        self.cache.invalidate_function(name);
+        if let Some(func) = function {
+            self.cache.invalidate_concurrency(&func.function_id.to_string());
+            self.cache.invalidate_env_vars(&func.function_id.to_string());
         }
 
         info!("Deleted function: {}", name);
@@ -378,11 +420,11 @@ impl ControlPlane {
         })
     }
 
-    #[instrument(skip(self, request))]
+    #[instrument(skip(self, _request))]
     pub async fn update_function_code(
         &self,
         name: &str,
-        request: UpdateFunctionCodeRequest,
+        _request: UpdateFunctionCodeRequest,
     ) -> Result<Function, LambdaError> {
         // TODO: Implement code update logic
         let mut function = self.get_function(name).await?;
@@ -394,6 +436,10 @@ impl ControlPlane {
             .execute(&self.pool)
             .await
             .map_err(|e| LambdaError::SqlxError(e))?;
+
+        // Invalidate cache since function was updated
+        self.cache.invalidate_function(name);
+        self.cache.invalidate_env_vars(&function.function_id.to_string());
 
         Ok(function)
     }
@@ -458,6 +504,10 @@ impl ControlPlane {
                 let _ = self.invoker.remove_container(&id).await;
             }
         }
+
+        // Invalidate cache since function configuration was updated
+        self.cache.invalidate_function(name);
+        self.cache.invalidate_env_vars(&function.function_id.to_string());
 
         Ok(function)
     }
@@ -724,12 +774,23 @@ impl ControlPlane {
         // Update in-memory limiter
         self.concurrency_manager
             .set_reserved_limit(func.function_id, config.reserved_concurrent_executions);
+        
+        // Invalidate cache since concurrency config was updated
+        self.cache.invalidate_concurrency(&func.function_id.to_string());
+        
         Ok(())
     }
 
     #[instrument(skip(self))]
     pub async fn get_concurrency(&self, name: &str) -> Result<ConcurrencyConfig, LambdaError> {
         let func = self.get_function(name).await?;
+        
+        // Try cache first
+        if let Some(cached_config) = self.cache.get_concurrency(&func.function_id.to_string()) {
+            return Ok(cached_config);
+        }
+
+        // Cache miss - fetch from database
         let reserved: Option<i64> = sqlx::query_scalar(
             "SELECT reserved_concurrent_executions FROM function_concurrency WHERE function_id = ?",
         )
@@ -738,9 +799,15 @@ impl ControlPlane {
         .await
         .map_err(|e| LambdaError::SqlxError(e))?
         .flatten();
-        Ok(ConcurrencyConfig {
+        
+        let config = ConcurrencyConfig {
             reserved_concurrent_executions: reserved.map(|v| v as u32),
-        })
+        };
+        
+        // Cache the result
+        self.cache.set_concurrency(func.function_id.to_string(), config.clone());
+        
+        Ok(config)
     }
 
     #[instrument(skip(self))]
@@ -753,6 +820,10 @@ impl ControlPlane {
             .map_err(|e| LambdaError::SqlxError(e))?;
         self.concurrency_manager
             .set_reserved_limit(func.function_id, None);
+        
+        // Invalidate cache since concurrency config was deleted
+        self.cache.invalidate_concurrency(&func.function_id.to_string());
+        
         Ok(())
     }
 
@@ -1305,6 +1376,12 @@ impl ControlPlane {
         &self,
         function: &Function,
     ) -> Result<HashMap<String, String>, LambdaError> {
+        // Try cache first
+        if let Some(cached_env_vars) = self.cache.get_env_vars(&function.function_id.to_string()) {
+            return Ok(cached_env_vars);
+        }
+
+        // Cache miss - resolve from function and secrets
         let mut out = function.environment.clone();
         // Only fetch secrets when needed to avoid extra queries
         for (_k, v) in out.clone().iter() {
@@ -1317,6 +1394,10 @@ impl ControlPlane {
                 }
             }
         }
+        
+        // Cache the result
+        self.cache.set_env_vars(function.function_id.to_string(), out.clone());
+        
         Ok(out)
     }
 
@@ -1362,22 +1443,35 @@ impl ControlPlane {
             .execute(&self.pool)
             .await
             .map_err(|e| LambdaError::SqlxError(e))?;
+        
+        // Invalidate cache since secret was deleted
+        self.cache.invalidate_secret(name);
+        
         // Drain any functions referencing this secret so next invokes fail/reflect missing secret
         self.drain_functions_referencing_secret(name).await?;
         Ok(())
     }
 
     pub async fn get_secret_value(&self, name: &str) -> Result<Option<String>, LambdaError> {
+        // Try cache first
+        if let Some(cached_value) = self.cache.get_secret(name) {
+            return Ok(Some(cached_value));
+        }
+
+        // Cache miss - fetch from database
         let val: Option<String> = sqlx::query_scalar("SELECT value FROM secrets WHERE name = ?")
             .bind(name)
             .fetch_optional(&self.pool)
             .await
             .map_err(|e| LambdaError::SqlxError(e))?;
+        
         if let Some(enc) = val {
             if let Ok(bytes) =
                 base64::Engine::decode(&base64::engine::general_purpose::STANDARD, enc)
             {
                 if let Ok(s) = String::from_utf8(bytes) {
+                    // Cache the result
+                    self.cache.set_secret(name.to_string(), s.clone());
                     return Ok(Some(s));
                 }
             }

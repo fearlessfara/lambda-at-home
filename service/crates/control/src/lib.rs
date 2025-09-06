@@ -1,4 +1,5 @@
 pub mod autoscaler;
+pub mod cache;
 pub mod concurrency;
 pub mod idle_watchdog;
 pub mod pending;
@@ -9,6 +10,7 @@ pub mod warm_pool;
 pub mod work_item;
 
 pub use autoscaler::*;
+pub use cache::*;
 pub use concurrency::*;
 pub use idle_watchdog::*;
 pub use pending::*;
