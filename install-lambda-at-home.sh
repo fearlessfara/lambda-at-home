@@ -142,11 +142,13 @@ download_binary() {
 verify_checksum() {
     local version=$1
     local platform=$2
+    local binary_name="lambda-at-home-server"
     local checksum_url="https://github.com/fearlessfara/lambda-at-home/releases/download/${version}/lambda-at-home-server-${version}-${platform}.sha256"
     
     # Add .exe extension for Windows
     if [[ "$platform" == *"windows"* ]]; then
         checksum_url="${checksum_url}.exe.sha256"
+        binary_name="lambda-at-home-server.exe"
     fi
     
     print_status "Verifying binary checksum..."
@@ -158,14 +160,34 @@ verify_checksum() {
     fi
     
     if [[ -f "checksum.sha256" ]]; then
+        # Create a temporary checksum file with the correct binary name
+        # The downloaded checksum file has the full filename, but our binary has a simple name
+        local full_binary_name="lambda-at-home-server-${version}-${platform}"
+        if [[ "$platform" == *"windows"* ]]; then
+            full_binary_name="${full_binary_name}.exe"
+        fi
+        
+        # Replace the full filename in checksum with our simple binary name
+        sed "s/${full_binary_name}/${binary_name}/" checksum.sha256 > checksum_fixed.sha256
+        
         if command_exists sha256sum; then
-            sha256sum -c checksum.sha256
+            if sha256sum -c checksum_fixed.sha256; then
+                print_success "Checksum verification passed"
+            else
+                print_error "Checksum verification failed"
+                exit 1
+            fi
         elif command_exists shasum; then
-            shasum -a 256 -c checksum.sha256
+            if shasum -a 256 -c checksum_fixed.sha256; then
+                print_success "Checksum verification passed"
+            else
+                print_error "Checksum verification failed"
+                exit 1
+            fi
         else
             print_warning "No checksum verification tool found, skipping verification"
         fi
-        rm -f checksum.sha256
+        rm -f checksum.sha256 checksum_fixed.sha256
     else
         print_warning "Could not download checksum file, skipping verification"
     fi
