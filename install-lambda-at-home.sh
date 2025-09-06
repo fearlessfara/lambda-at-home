@@ -226,6 +226,13 @@ install_binary() {
 
 # Function to prompt user for configuration
 prompt_config() {
+    # Check if running in non-interactive mode (piped from curl)
+    if [[ ! -t 0 ]] || [[ -n "$NON_INTERACTIVE" ]]; then
+        print_status "Running in non-interactive mode, using default configuration"
+        set_default_config
+        return
+    fi
+    
     print_status "Lambda@Home Configuration Setup"
     echo
     
@@ -302,6 +309,22 @@ prompt_config() {
     echo
     print_success "Configuration saved!"
     echo
+}
+
+# Function to set default configuration (non-interactive mode)
+set_default_config() {
+    CONFIG_DATA_DIR="data"
+    CONFIG_BIND="127.0.0.1"
+    CONFIG_USER_API_PORT="9000"
+    CONFIG_RUNTIME_API_PORT="9001"
+    CONFIG_MEMORY_MB="512"
+    CONFIG_TIMEOUT_MS="3000"
+    CONFIG_TMP_MB="512"
+    CONFIG_SOFT_IDLE_MS="45000"
+    CONFIG_HARD_IDLE_MS="300000"
+    CONFIG_MAX_CONCURRENCY="256"
+    
+    print_success "Using default configuration"
 }
 
 # Function to create data directory and config
@@ -550,6 +573,8 @@ main() {
     echo "     ./lambda-at-home-server*"
     echo "  2. Or run with custom config:"
     echo "     ./lambda-at-home-server* --config config/config.toml"
+    echo "  3. To customize configuration:"
+    echo "     Edit config/config.toml to change ports, memory, timeouts, etc."
     echo
     print_status "Lambda@Home will be available at:"
     echo "  - User API: http://127.0.0.1:9000"
