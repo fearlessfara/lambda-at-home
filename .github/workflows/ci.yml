@@ -192,7 +192,7 @@ jobs:
           # Wait for server to start and verify it's running
           echo "⏳ Waiting for server to start..."
           for i in {1..30}; do
-            if curl -s http://localhost:9000/healthz > /dev/null 2>&1; then
+            if curl -s http://localhost:9000/api/healthz > /dev/null 2>&1; then
               echo "✅ Server is ready!"
               break
             fi
