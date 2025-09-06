@@ -360,18 +360,20 @@ main() {
     echo
     print_warning "Make sure Docker is running before starting Lambda@Home!"
     
-    # Change to the lambda@home directory
-    cd "$lambda_dir"
     echo
-    print_success "Changed to lambda@home directory"
+    print_success "Installation complete! Lambda@Home is ready in: ${GREEN}$lambda_dir${NC}"
     echo
-    print_status "🚀 To start Lambda@Home, run:"
+    print_status "🚀 To start Lambda@Home:"
+    echo -e "  ${GREEN}cd $lambda_dir${NC}"
     echo -e "  ${GREEN}./lambda-at-home-server${NC}"
     echo
     print_status "⚙️  Or with custom config:"
+    echo -e "  ${YELLOW}cd $lambda_dir${NC}"
     echo -e "  ${YELLOW}./lambda-at-home-server --config config/config.toml${NC}"
     echo
     print_status "🌐 Then access the web console at: ${BLUE}http://localhost:9000${NC}"
+    echo
+    print_status "💡 Visit the console to create and manage your Lambda functions!"
 }
 
 # Run main function
