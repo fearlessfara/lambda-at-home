@@ -13,8 +13,12 @@ use tokio::signal;
 use tracing::{info, warn};
 
 fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
-    // Try to load from service/configs/default.toml first, then configs/default.toml
-    let config_paths = ["service/configs/default.toml", "configs/default.toml"];
+    // Try to load from various config locations
+    let config_paths = [
+        "service/configs/default.toml", 
+        "configs/default.toml",
+        "config/config.toml"
+    ];
 
     for path in &config_paths {
         if Path::new(path).exists() {
