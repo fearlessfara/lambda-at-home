@@ -1,0 +1,57 @@
+[package]
+name = "lambda-runtime-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Runtime API for Lambda@Home containers"
+
+[dependencies]
+# Web framework
+axum = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+
+# Shared models
+lambda-models = { path = "../models" }
+lambda-control = { path = "../control" }
+lambda-invoker = { path = "../invoker" }
+lambda-metrics = { path = "../metrics" }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Async utilities
+futures = { workspace = true }
+uuid = { workspace = true }
+async-trait = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Encoding
+base64 = { workspace = true }
+bytes = { workspace = true }
+sha2 = { workspace = true }
+
+# HTTP client (for demo bin)
+reqwest = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+[dev-dependencies]
+axum = { version = "0.7", features = ["macros", "json"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+tower = { version = "0.4", features = ["util"] }
+serde_json = "1"
+bytes = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt"] }

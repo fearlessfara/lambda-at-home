@@ -1,0 +1,113 @@
+[package]
+name = "lambda-at-home"
+version = "0.1.0"
+edition = "2021"
+authors = ["Lambda@Home Contributors"]
+license = "MIT"
+description = "Lambda@Home - Docker-backed AWS Lambda clone"
+
+[[bin]]
+name = "lambda-at-home-server"
+path = "src/bin/lambda-at-home-server.rs"
+
+[dependencies]
+# All workspace crates
+lambda-api = { path = "crates/api" }
+lambda-runtime-api = { path = "crates/runtime_api" }
+lambda-control = { path = "crates/control" }
+lambda-invoker = { path = "crates/invoker" }
+lambda-packaging = { path = "crates/packaging" }
+lambda-models = { path = "crates/models" }
+lambda-metrics = { path = "crates/metrics" }
+
+# Web framework
+axum = "0.7"
+tokio = { version = "1.0", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Docker integration
+bollard = "0.16"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Database
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"] }
+
+# Async utilities
+futures = "0.3"
+futures-util = "0.3"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+async-trait = "0.1"
+
+# HTTP client
+reqwest = { version = "0.11", features = ["json"] }
+
+# File system operations
+tokio-util = { version = "0.7", features = ["codec"] }
+tempfile = "3.8"
+tar = "0.4"
+flate2 = "1.0"
+zip = "0.6"
+
+# CLI
+clap = { version = "4.4", features = ["derive"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Configuration
+figment = "0.10"
+toml = "0.8"
+
+# Logging and metrics
+tracing = "0.1"
+tracing-subscriber = "0.3"
+opentelemetry = "0.21"
+opentelemetry-prometheus = "0.10"
+prometheus = "0.13"
+
+# Encoding
+base64 = "0.21"
+bytes = "1.5"
+
+# Hashing
+sha2 = "0.10"
+
+# Time
+time = "0.3"
+
+# Random
+rand = "0.8"
+
+# Testing
+tokio-test = "0.4"
+
+# Embedding
+rust-embed = "8.0"
+
+[dev-dependencies]
+lambda-testsupport = { path = "crates/testsupport" }
+futures = "0.3"
+serde_json = "1.0"
+reqwest = { version = "0.11", features = ["json"] }
+zip = "0.6"
+tokio = { version = "1.0", features = ["test-util"] }
+
+[features]
+default = []
+docker_tests = []
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+opt-level = 0
+debug = true

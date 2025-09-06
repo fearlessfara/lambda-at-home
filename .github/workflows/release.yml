@@ -80,11 +80,12 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
+            service/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Build release binary
-        run: cargo build --release --bin lambda-at-home-server
+        run: cd service && cargo build --release --bin lambda-at-home-server
 
       - name: Package binary
         shell: bash
@@ -101,7 +102,7 @@ jobs:
           fi
           
           # Copy binary with platform-specific naming
-          cp "target/release/${binary_name}" "release-assets/${final_name}"
+          cp "service/target/release/${binary_name}" "release-assets/${final_name}"
           
           # Make executable (Unix only)
           if [[ "${{ runner.os }}" != "Windows" ]]; then

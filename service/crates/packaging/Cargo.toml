@@ -1,0 +1,52 @@
+[package]
+name = "lambda-packaging"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Packaging and image building for Lambda@Home"
+
+[dependencies]
+# Docker integration
+bollard = { workspace = true }
+
+# Shared models
+lambda-models = { path = "../models" }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# File system operations
+tokio = { workspace = true }
+tempfile = { workspace = true }
+zip = { workspace = true }
+flate2 = { workspace = true }
+
+# Async utilities
+futures = { workspace = true }
+uuid = { workspace = true }
+async-trait = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Encoding
+base64 = { workspace = true }
+bytes = { workspace = true }
+
+# Hashing
+sha2 = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+# Embedding
+rust-embed = "8"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

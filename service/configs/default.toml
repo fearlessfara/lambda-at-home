@@ -1,0 +1,23 @@
+[server]
+bind = "127.0.0.1"
+port_user_api = 9000
+port_runtime_api = 9001
+
+[data]
+dir = "service/data"
+db_url = "sqlite://service/data/lhome.db"
+
+[docker]
+host = ""
+
+[defaults]
+memory_mb = 512
+timeout_ms = 3000
+tmp_mb = 512
+
+[idle]
+soft_ms = 45000   # stop container
+hard_ms = 300000  # rm container
+
+[limits]
+max_global_concurrency = 256

@@ -29,6 +29,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
+            service/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
@@ -42,11 +43,10 @@ jobs:
         run: |
           rustc -V
           cargo -V
-          cargo build --workspace --all-targets
+          cd service && cargo build --workspace --all-targets
 
-      # Optional: keep tests if desired
-      # - name: Unit tests (workspace libs)
-      #   run: cargo test --workspace --lib
+      - name: Unit tests (workspace libs)
+        run: cd service && cargo test --workspace --lib
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -59,3 +59,29 @@ jobs:
           path: console/node_modules
           key: ${{ runner.os }}-npm-${{ hashFiles('console/package-lock.json') }}
           restore-keys: ${{ runner.os }}-npm-
+
+      - name: Cache e2e npm
+        uses: actions/cache@v4
+        with:
+          path: e2e/node_modules
+          key: ${{ runner.os }}-e2e-npm-${{ hashFiles('e2e/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-e2e-npm-
+
+      - name: Install e2e dependencies
+        working-directory: e2e
+        run: npm ci
+
+      - name: Run e2e tests
+        run: |
+          # Start the server in the background
+          cd service && cargo run --bin lambda-at-home-server &
+          SERVER_PID=$!
+          
+          # Wait for server to start
+          sleep 10
+          
+          # Run e2e tests
+          cd e2e && npm test
+          
+          # Clean up
+          kill $SERVER_PID

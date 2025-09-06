@@ -1,14 +1,15 @@
 [workspace]
 members = [
-    "crates/api",
-    "crates/runtime_api", 
-    "crates/control",
-    "crates/invoker",
-    "crates/packaging",
-    "crates/models",
-    "crates/metrics",
-    "crates/cli",
-    "crates/testsupport",
+    "service",
+    "service/crates/api",
+    "service/crates/runtime_api", 
+    "service/crates/control",
+    "service/crates/invoker",
+    "service/crates/packaging",
+    "service/crates/models",
+    "service/crates/metrics",
+    "service/crates/cli",
+    "service/crates/testsupport",
 ]
 resolver = "2"
 
@@ -87,6 +88,9 @@ rand = "0.8"
 # Testing
 tokio-test = "0.4"
 
+# Embedding
+rust-embed = "8.0"
+
 [profile.release]
 opt-level = 3
 lto = true
@@ -96,59 +100,3 @@ panic = "abort"
 [profile.dev]
 opt-level = 0
 debug = true
-
-# Main binary
-[package]
-name = "lambda-at-home"
-version.workspace = true
-edition.workspace = true
-authors.workspace = true
-license.workspace = true
-description.workspace = true
-
-[[bin]]
-name = "lambda-at-home-server"
-path = "src/bin/lambda-at-home-server.rs"
-
-[dependencies]
-# All workspace crates
-lambda-api = { path = "crates/api" }
-lambda-runtime-api = { path = "crates/runtime_api" }
-lambda-control = { path = "crates/control" }
-lambda-invoker = { path = "crates/invoker" }
-lambda-packaging = { path = "crates/packaging" }
-lambda-models = { path = "crates/models" }
-lambda-metrics = { path = "crates/metrics" }
-
-# Configuration
-figment = { workspace = true }
-toml = { workspace = true }
-
-# Async runtime
-tokio = { workspace = true }
-
-# Error handling
-anyhow = { workspace = true }
-
-# Logging
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-
-# Web framework
-axum = { workspace = true }
-
-# Database
-sqlx = { workspace = true }
-
-# Test dependencies
-[dev-dependencies]
-lambda-testsupport = { path = "crates/testsupport" }
-futures = { workspace = true }
-serde_json = { workspace = true }
-reqwest = { version = "0.11", features = ["json"] }
-zip = { workspace = true }
-tokio = { workspace = true, features = ["test-util"] }
-
-[features]
-default = []
-docker_tests = []

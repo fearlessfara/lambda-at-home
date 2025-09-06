@@ -3,9 +3,9 @@
 This project has two kinds of tests:
 
 - Fast, local unit/integration tests run by `cargo test`.
-- Smoke tests that exercise the full server + Docker lifecycle in scripts/.
+- End-to-end tests that exercise the full server + Docker lifecycle in `e2e/`.
 
-Prerequisites for smoke tests:
+Prerequisites for e2e tests:
 - Docker daemon running locally
 - Server running in another terminal: `make run`
 
@@ -20,49 +20,56 @@ make test
 The control-plane autoscaling logic also includes pure decision tests in:
 - `crates/control/src/autoscaler.rs` (tests for `plan_scale`)
 
-## Smoke tests (scripts/)
+## End-to-end tests (e2e/)
 
-See `scripts/README.md` for details. Typical flows:
+See `e2e/README.md` for details. The e2e test suite includes:
 
-### Autoscaling + reuse (continuous)
-
+### Service Tests
 ```
-make run                         # in one terminal
-USER_API=http://127.0.0.1:9000 \
-CONCURRENCY=8 CYCLES=5          \
-./scripts/test-autoscaling.sh
+make test-service
+# or
+cd e2e && npm run test:service
 ```
 
-What it checks:
-- Parallel burst triggers scale-out to >= MIN_BURST containers (default 2)
-- Subsequent sequential invokes do not increase container count (reuse)
+Tests basic service functionality, health checks, and function lifecycle.
 
-Tunables (env vars):
-- `CONCURRENCY` (burst size, default 8)
-- `SEQ_N` (sequential invokes per cycle, default 5)
-- `CYCLES` (0=infinite)
-- `MIN_BURST` (expectation for scale out, default 2)
-- `ZIP_PATH`, `RUNTIME`, `HANDLER`, `FN_NAME`
-
-### End-to-end service check
-
+### Runtime Tests
 ```
-./scripts/test-service.sh
+make test-node-runtimes
+# or
+cd e2e && npm run test:runtimes
 ```
 
-Runs a simple function end-to-end and checks server health and logs.
+Tests Node.js 18.x and 22.x runtime compatibility and performance.
 
-### Metrics
-
+### Metrics Tests
 ```
-./scripts/test-metrics.sh
+make test-metrics
+# or
+cd e2e && npm run test:metrics
 ```
 
-Fetches `/metrics` and validates the endpoint is reachable.
+Tests performance benchmarking, load testing, and metrics collection.
+
+### All E2E Tests
+```
+make test-e2e
+# or
+cd e2e && npm test
+```
+
+Runs the complete test suite including:
+- Service functionality
+- Runtime compatibility
+- Performance metrics
+- Container lifecycle
+- Error handling
+- Concurrency and throttling
+- Function versioning
 
 ## Configuration knobs for lifecycle
 
-Tune in `configs/default.toml`:
+Tune in `service/configs/default.toml`:
 
 ```
 [idle]

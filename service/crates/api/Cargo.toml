@@ -1,0 +1,58 @@
+[package]
+name = "lambda-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "User API for Lambda@Home"
+
+[dependencies]
+# Web framework
+axum = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+form_urlencoded = "1"
+rust-embed = "8"
+mime_guess = "2"
+
+# Shared models
+lambda-models = { path = "../models" }
+lambda-control = { path = "../control" }
+lambda-invoker = { path = "../invoker" }
+lambda-packaging = { path = "../packaging" }
+lambda-metrics = { path = "../metrics" }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Async utilities
+futures = { workspace = true }
+uuid = { workspace = true }
+async-trait = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Encoding
+base64 = { workspace = true }
+bytes = { workspace = true }
+
+# Time
+time = { workspace = true }
+
+[dev-dependencies]
+axum = { version = "0.7", features = ["macros", "json"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+tower = { version = "0.4", features = ["util"] }
+serde_json = "1"
+bytes = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt"] }
+anyhow = "1"
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite"] }
