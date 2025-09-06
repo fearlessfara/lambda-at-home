@@ -20,3 +20,6 @@ jobs:
           release-type: rust
           manifest-file: Cargo.toml
           target-branch: ${{ github.ref_name }}
+          skip-github-release: true
+          skip-github-pull-request: false
+          include-component-in-tag: false

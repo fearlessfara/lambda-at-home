@@ -124,6 +124,7 @@ jobs:
     permissions:
       contents: write
       packages: write
+      releases: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -194,11 +195,26 @@ jobs:
             echo "✅ All expected binaries found!"
           fi
 
+      - name: Check if release exists
+        id: check-release
+        run: |
+          if gh release view ${{ github.ref_name }} > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Release ${{ github.ref_name }} already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Release ${{ github.ref_name }} does not exist"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: Lambda@Home ${{ github.ref_name }}
+          overwrite: true
+          generate_release_notes: false
           body: |
             ## Lambda@Home ${{ github.ref_name }}
             
@@ -270,7 +286,7 @@ jobs:
             open http://localhost:9000
             
             # API endpoints
-            curl http://localhost:9000/api/healthz
+            curl http://localhost:9000/healthz
             ```
             
             ### Documentation
