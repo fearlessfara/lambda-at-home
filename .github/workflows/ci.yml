@@ -166,11 +166,12 @@ jobs:
           set -e
           # Build the server first
           echo "🔨 Building server binary..."
-          cd service && cargo build --bin lambda-at-home-server
+          cd service
+          cargo build --bin lambda-at-home-server
           
           # Start the server in the background
           echo "🚀 Starting server..."
-          cd service && cargo run --bin lambda-at-home-server &
+          cargo run --bin lambda-at-home-server &
           SERVER_PID=$!
           
           # Function to cleanup server
@@ -199,4 +200,4 @@ jobs:
           
           # Run e2e tests
           echo "🧪 Running e2e tests..."
-          cd e2e && npm test
+          cd .. && cd e2e && npm test
