@@ -1,5 +1,5 @@
-use lambda_metrics::*;
 use ::prometheus::{Counter, Encoder, Histogram, HistogramOpts, Registry, TextEncoder};
+use lambda_metrics::*;
 
 #[test]
 fn test_metrics_service_creation() {
@@ -28,7 +28,7 @@ fn test_metric_name_registration() {
     ];
 
     for metric in &expected_metrics {
-        assert!(metrics_text.contains(metric), "Missing metric: {}", metric);
+        assert!(metrics_text.contains(metric), "Missing metric: {metric}");
     }
 }
 
@@ -46,7 +46,7 @@ fn test_tracing_fields_formatting() {
     ];
 
     for (key, value) in &test_fields {
-        let formatted = format!("{}={}", key, value);
+        let formatted = format!("{key}={value}");
         assert!(formatted.contains(key));
         assert!(formatted.contains(value));
     }

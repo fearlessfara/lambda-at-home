@@ -83,13 +83,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             create_function(
                 &client,
                 &cli.endpoint,
-                name,
-                runtime,
-                handler,
-                zip_file,
-                description,
-                memory,
-                timeout,
+                CreateFunctionParams {
+                    name,
+                    runtime,
+                    handler,
+                    zip_file,
+                    description,
+                    memory,
+                    timeout,
+                },
             )
             .await?;
         }
@@ -114,9 +116,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn create_function(
-    client: &Client,
-    endpoint: &str,
+#[derive(Debug)]
+struct CreateFunctionParams {
     name: String,
     runtime: String,
     handler: String,
@@ -124,33 +125,39 @@ async fn create_function(
     description: Option<String>,
     memory: u64,
     timeout: u64,
+}
+
+async fn create_function(
+    client: &Client,
+    endpoint: &str,
+    params: CreateFunctionParams,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    info!("Creating function: {}", name);
+    info!("Creating function: {}", params.name);
 
     // Read ZIP file
-    let zip_data = std::fs::read(&zip_file)?;
-    let zip_base64 = base64::encode(&zip_data);
+    let zip_data = std::fs::read(&params.zip_file)?;
+    let zip_base64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &zip_data);
 
     let request = CreateFunctionRequest {
-        function_name: name.clone(),
-        runtime,
+        function_name: params.name.clone(),
+        runtime: params.runtime,
         role: None,
-        handler,
+        handler: params.handler,
         code: FunctionCode {
             zip_file: Some(zip_base64),
             s3_bucket: None,
             s3_key: None,
             s3_object_version: None,
         },
-        description,
-        timeout: Some(timeout * 1000), // Convert to milliseconds
-        memory_size: Some(memory),
+        description: params.description,
+        timeout: Some(params.timeout * 1000), // Convert to milliseconds
+        memory_size: Some(params.memory),
         environment: None,
         publish: Some(false),
     };
 
     let response = client
-        .post(&format!("{}/2015-03-31/functions", endpoint))
+        .post(format!("{endpoint}/2015-03-31/functions"))
         .json(&request)
         .send()
         .await?;
@@ -176,7 +183,7 @@ async fn list_functions(client: &Client, endpoint: &str) -> Result<(), Box<dyn s
     info!("Listing functions");
 
     let response = client
-        .get(&format!("{}/2015-03-31/functions", endpoint))
+        .get(format!("{endpoint}/2015-03-31/functions"))
         .send()
         .await?;
 
@@ -206,7 +213,7 @@ async fn get_function(
     info!("Getting function: {}", name);
 
     let response = client
-        .get(&format!("{}/2015-03-31/functions/{}", endpoint, name))
+        .get(format!("{endpoint}/2015-03-31/functions/{name}"))
         .send()
         .await?;
 
@@ -221,7 +228,7 @@ async fn get_function(
         println!("   State: {:?}", function.state);
         println!("   Last Modified: {}", function.last_modified);
         if let Some(desc) = function.description {
-            println!("   Description: {}", desc);
+            println!("   Description: {desc}");
         }
     } else {
         let error_text = response.text().await?;
@@ -240,12 +247,12 @@ async fn delete_function(
     info!("Deleting function: {}", name);
 
     let response = client
-        .delete(&format!("{}/2015-03-31/functions/{}", endpoint, name))
+        .delete(format!("{endpoint}/2015-03-31/functions/{name}"))
         .send()
         .await?;
 
     if response.status().is_success() {
-        println!("✅ Function deleted successfully: {}", name);
+        println!("✅ Function deleted successfully: {name}");
     } else {
         let error_text = response.text().await?;
         error!("Failed to delete function: {}", error_text);
@@ -270,10 +277,9 @@ async fn invoke_function(
         json!({"test": "payload"})
     };
 
-    let mut request = client
-        .post(&format!(
-            "{}/2015-03-31/functions/{}/invocations",
-            endpoint, name
+    let request = client
+        .post(format!(
+            "{endpoint}/2015-03-31/functions/{name}/invocations"
         ))
         .header("X-Amz-Invocation-Type", invocation_type)
         .json(&payload_value);
@@ -291,7 +297,7 @@ async fn invoke_function(
     }
 
     let response_text = response.text().await?;
-    println!("   Body: {}", response_text);
+    println!("   Body: {response_text}");
 
     Ok(())
 }

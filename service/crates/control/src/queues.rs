@@ -60,6 +60,12 @@ pub struct Queues {
     inner: Arc<DashMap<FnKey, PerFn>>,
 }
 
+impl Default for Queues {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Queues {
     pub fn new() -> Self {
         Self {

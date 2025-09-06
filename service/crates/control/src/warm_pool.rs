@@ -38,6 +38,12 @@ pub struct WarmPool {
     containers: Arc<DashMap<FnKey, Vec<WarmContainer>>>,
 }
 
+impl Default for WarmPool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WarmPool {
     pub fn new() -> Self {
         Self {
@@ -121,7 +127,7 @@ impl WarmPool {
 
         self.containers
             .entry(key.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(container);
 
         info!(
@@ -229,7 +235,10 @@ impl WarmPool {
 
     /// Get total number of warm containers across all functions
     pub async fn total_container_count(&self) -> usize {
-        self.containers.iter().map(|entry| entry.value().len()).sum()
+        self.containers
+            .iter()
+            .map(|entry| entry.value().len())
+            .sum()
     }
 
     /// Check if there is at least one idle (WarmIdle) container for the key

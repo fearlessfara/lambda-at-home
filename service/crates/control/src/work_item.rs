@@ -56,7 +56,7 @@ impl WorkItem {
             function: FunctionMeta::from(function),
             payload,
             deadline_ms,
-            log_type: request.log_type.map(|lt| format!("{:?}", lt)),
+            log_type: request.log_type.map(|lt| format!("{lt:?}")),
             client_context: request.client_context,
             cognito_identity: None, // TODO: Extract from request if available
         }

@@ -31,7 +31,7 @@ pub async fn start_server(
             .layer(CorsLayer::permissive()),
     );
 
-    let listener = tokio::net::TcpListener::bind(format!("{}:{}", bind, port)).await?;
+    let listener = tokio::net::TcpListener::bind(format!("{bind}:{port}")).await?;
     info!("Runtime API server listening on {}:{}", bind, port);
 
     axum::serve(listener, app).await?;

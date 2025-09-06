@@ -151,7 +151,7 @@ async fn create_sets_security_hardening_and_runtime_env() {
     assert_eq!(created.user.as_deref(), Some("1000:1000"));
 
     // Writable mount for /tmp
-    assert!(created.mounts.iter().any(|m| m.1 == "/tmp" && m.2 == false));
+    assert!(created.mounts.iter().any(|m| m.1 == "/tmp" && !m.2));
 
     // Env & host reachability
     let env = created

@@ -20,14 +20,16 @@ fn get_embedded_bootstrap(function: &Function) -> Result<Vec<u8>, LambdaError> {
         "nodejs18.x" => "nodejs18/bootstrap.js",
         "nodejs22.x" => "nodejs22/bootstrap.js",
         "python3.11" => "python311/bootstrap.py",
-        _ => return Err(LambdaError::InternalError {
-            reason: format!("Unsupported runtime: {}", function.runtime),
-        }),
+        _ => {
+            return Err(LambdaError::InternalError {
+                reason: format!("Unsupported runtime: {}", function.runtime),
+            })
+        }
     };
-    
+
     RuntimeAssets::get(bootstrap_path)
         .ok_or_else(|| LambdaError::InternalError {
-            reason: format!("Bootstrap file not found: {}", bootstrap_path),
+            reason: format!("Bootstrap file not found: {bootstrap_path}"),
         })
         .map(|file| file.data.into_owned())
 }
@@ -110,7 +112,7 @@ impl ImageBuilder {
             error!("Docker build failed - stdout: {}", stdout);
             error!("Docker build failed - stderr: {}", stderr);
             return Err(LambdaError::DockerError {
-                message: format!("Docker build failed: {}", stderr),
+                message: format!("Docker build failed: {stderr}"),
             });
         }
 

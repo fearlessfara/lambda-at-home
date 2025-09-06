@@ -2,6 +2,7 @@ use lambda_control::queues::FnKey;
 use lambda_control::work_item::{FunctionMeta, WorkItem};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[allow(dead_code)]
 pub fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -9,6 +10,7 @@ pub fn now_ms() -> i64 {
         .as_millis() as i64
 }
 
+#[allow(dead_code)]
 pub fn sample_meta() -> FunctionMeta {
     FunctionMeta {
         function_name: "hello".into(),
@@ -26,6 +28,7 @@ pub fn sample_meta() -> FunctionMeta {
     }
 }
 
+#[allow(dead_code)]
 pub fn wi(id: &str) -> WorkItem {
     WorkItem {
         request_id: id.to_string(),
@@ -38,6 +41,7 @@ pub fn wi(id: &str) -> WorkItem {
     }
 }
 
+#[allow(dead_code)]
 pub fn fn_key_from_meta() -> FnKey {
     // Hash must match FnKey::from_work_item(sample_meta()).
     // We can derive from a WorkItem to ensure consistency.

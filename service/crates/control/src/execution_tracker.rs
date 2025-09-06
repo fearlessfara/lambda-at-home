@@ -32,10 +32,10 @@ impl ExecutionTracker {
                  VALUES (?, ?, ?, ?, ?, ?)"
             )
             .bind(&execution_id_clone)
-            .bind(&function_id)
+            .bind(function_id)
             .bind(&function_version)
             .bind(&aws_request_id)
-            .bind(&start_time)
+            .bind(start_time)
             .bind("Running")
             .execute(&*pool)
             .await;
@@ -53,24 +53,23 @@ impl ExecutionTracker {
 
         tokio::spawn(async move {
             // Get the start time to calculate duration
-            let start_time: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
-                "SELECT start_time FROM executions WHERE execution_id = ?"
-            )
-            .bind(&execution_id_clone)
-            .fetch_optional(&*pool)
-            .await
-            .unwrap_or(None);
-            
+            let start_time: Option<chrono::DateTime<chrono::Utc>> =
+                sqlx::query_scalar("SELECT start_time FROM executions WHERE execution_id = ?")
+                    .bind(&execution_id_clone)
+                    .fetch_optional(&*pool)
+                    .await
+                    .unwrap_or(None);
+
             let duration_ms = if let Some(start) = start_time {
-                (end_time - start).num_milliseconds() as i64
+                (end_time - start).num_milliseconds()
             } else {
                 0
             };
-            
+
             let _ = sqlx::query(
                 "UPDATE executions SET end_time = ?, status = 'Success', duration_ms = ? WHERE execution_id = ?"
             )
-            .bind(&end_time)
+            .bind(end_time)
             .bind(duration_ms)
             .bind(&execution_id_clone)
             .execute(&*pool)
@@ -90,24 +89,23 @@ impl ExecutionTracker {
 
         tokio::spawn(async move {
             // Get the start time to calculate duration
-            let start_time: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
-                "SELECT start_time FROM executions WHERE execution_id = ?"
-            )
-            .bind(&execution_id_clone)
-            .fetch_optional(&*pool)
-            .await
-            .unwrap_or(None);
-            
+            let start_time: Option<chrono::DateTime<chrono::Utc>> =
+                sqlx::query_scalar("SELECT start_time FROM executions WHERE execution_id = ?")
+                    .bind(&execution_id_clone)
+                    .fetch_optional(&*pool)
+                    .await
+                    .unwrap_or(None);
+
             let duration_ms = if let Some(start) = start_time {
-                (end_time - start).num_milliseconds() as i64
+                (end_time - start).num_milliseconds()
             } else {
                 0
             };
-            
+
             let _ = sqlx::query(
                 "UPDATE executions SET end_time = ?, status = 'Failed', error_type = ?, duration_ms = ? WHERE execution_id = ?"
             )
-            .bind(&end_time)
+            .bind(end_time)
             .bind(&error_type)
             .bind(duration_ms)
             .bind(&execution_id_clone)

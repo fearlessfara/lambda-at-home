@@ -52,6 +52,12 @@ pub struct ConcurrencyManager {
     per_function: Arc<Mutex<HashMap<uuid::Uuid, Concurrency>>>, // reserved limits per function
 }
 
+impl Default for ConcurrencyManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConcurrencyManager {
     pub fn new() -> Self {
         Self {
@@ -80,14 +86,14 @@ impl ConcurrencyManager {
         };
         if let Some(c) = per {
             return c.acquire().await.map_err(|e| LambdaError::InternalError {
-                reason: format!("Failed to acquire concurrency token: {}", e),
+                reason: format!("Failed to acquire concurrency token: {e}"),
             });
         }
         self.global
             .acquire()
             .await
             .map_err(|e| LambdaError::InternalError {
-                reason: format!("Failed to acquire concurrency token: {}", e),
+                reason: format!("Failed to acquire concurrency token: {e}"),
             })
     }
 

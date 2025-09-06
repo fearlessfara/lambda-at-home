@@ -21,7 +21,7 @@ lambda_duration_ms_count 5
 
     let duration_hist = metrics.histograms.get("lambda_duration_ms").unwrap();
     assert_eq!(duration_hist.sum, 100.5);
-    
+
     // The bucket names are extracted from the metric names, so they should be "unknown" for this test data
     // Since all buckets have the same key "unknown", the last value (5.0) overwrites the previous ones
     assert_eq!(duration_hist.buckets.get("unknown"), Some(&5.0));

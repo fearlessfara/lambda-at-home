@@ -12,6 +12,14 @@ ui-build:
 test-unit:
 	cd service && cargo test --workspace --lib
 
+# Test execution tracker module specifically
+test-execution-tracker:
+	cd service && cargo test --package lambda-control --lib
+
+# Test refactored registry functionality
+test-registry:
+	cd service && cargo test --package lambda-control --lib
+
 # Run integration tests (requires Docker and complete server implementation)
 test-int:
 	@echo "🐳 Starting Docker for integration tests..."
@@ -67,10 +75,10 @@ test-node-runtimes:
 	cd e2e && npm run test:runtimes
 
 # CI targets
-ci: fmt-check clippy test-unit
+ci: fmt-check clippy test-unit test-execution-tracker test-registry
 
 # Full CI with integration tests (requires Docker)
-ci-full: fmt-check clippy test-unit test-int
+ci-full: fmt-check clippy test-unit test-execution-tracker test-registry test-int
 
 # Help
 help:
@@ -81,6 +89,8 @@ help:
 	@echo "  run-release- Run the release binary"
 	@echo "  test       - Run unit tests"
 	@echo "  test-unit  - Run unit tests only"
+	@echo "  test-execution-tracker - Test execution tracker module"
+	@echo "  test-registry - Test refactored registry functionality"
 	@echo "  test-int   - Run integration tests (requires Docker)"
 	@echo "  fmt        - Format code"
 	@echo "  fmt-check  - Check code formatting"

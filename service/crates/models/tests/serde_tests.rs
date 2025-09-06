@@ -1,5 +1,4 @@
 use lambda_models::*;
-use serde_json;
 
 #[test]
 fn test_function_serde_roundtrip() {

@@ -69,7 +69,7 @@ fn test_environment_variables() {
     ));
 
     for (key, value) in env_vars {
-        env.push(format!("{}={}", key, value));
+        env.push(format!("{key}={value}"));
     }
 
     assert!(env.contains(&"AWS_LAMBDA_RUNTIME_API=host.docker.internal:9001".to_string()));

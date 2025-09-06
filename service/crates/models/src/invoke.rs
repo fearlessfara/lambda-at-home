@@ -30,7 +30,7 @@ impl std::str::FromStr for InvocationType {
             "RequestResponse" => Ok(InvocationType::RequestResponse),
             "Event" => Ok(InvocationType::Event),
             "DryRun" => Ok(InvocationType::DryRun),
-            _ => Err(format!("Invalid invocation type: {}", s)),
+            _ => Err(format!("Invalid invocation type: {s}")),
         }
     }
 }
@@ -49,7 +49,7 @@ impl std::str::FromStr for LogType {
         match s {
             "None" => Ok(LogType::None),
             "Tail" => Ok(LogType::Tail),
-            _ => Err(format!("Invalid log type: {}", s)),
+            _ => Err(format!("Invalid log type: {s}")),
         }
     }
 }

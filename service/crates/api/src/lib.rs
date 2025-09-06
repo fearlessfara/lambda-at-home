@@ -8,16 +8,15 @@ pub use middleware::*;
 pub use routes::*;
 pub use state::*;
 
+use axum::extract::DefaultBodyLimit;
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::IntoResponse;
 use axum::{routing::get, Router};
-use axum::extract::DefaultBodyLimit;
 use lambda_control::ControlPlane;
 use lambda_invoker::Invoker;
 use lambda_metrics::MetricsService;
 use lambda_models::Config;
 use lambda_packaging::PackagingService;
-use mime_guess;
 use rust_embed::RustEmbed;
 use std::sync::Arc;
 use tower::ServiceBuilder;
@@ -30,11 +29,11 @@ struct Assets;
 
 fn embedded_file_response(path: &str) -> impl IntoResponse {
     let key = if path.is_empty() { "index.html" } else { path };
-    
+
     // For SPA routes, we need to serve index.html for any route that doesn't correspond
     // to an actual static file. Check if the requested path has a file extension.
     let is_static_file = key.contains('.') && !key.ends_with(".html");
-    
+
     let bytes = if is_static_file {
         // For static files (CSS, JS, images, etc.), try to find the actual file
         Assets::get(key).or_else(|| Assets::get("index.html"))
@@ -42,7 +41,7 @@ fn embedded_file_response(path: &str) -> impl IntoResponse {
         // For SPA routes (no extension or .html), always serve index.html
         Assets::get("index.html")
     };
-    
+
     if let Some(content) = bytes {
         let body: axum::body::Body = axum::body::Body::from(content.data.into_owned());
         let mime = if is_static_file {
@@ -53,8 +52,7 @@ fn embedded_file_response(path: &str) -> impl IntoResponse {
         let mut headers = HeaderMap::new();
         headers.insert(
             axum::http::header::CONTENT_TYPE,
-            HeaderValue::from_str(mime.as_ref())
-                .unwrap_or(HeaderValue::from_static("text/html")),
+            HeaderValue::from_str(mime.as_ref()).unwrap_or(HeaderValue::from_static("text/html")),
         );
         (StatusCode::OK, headers, body).into_response()
     } else {
@@ -88,10 +86,10 @@ pub async fn start_server(
 
     // Build API (AWS-compatible) under /api
     let api = build_router(app_state.clone());
-    
+
     // Calculate body size limit in bytes
     let body_size_limit = (app_state.config.server.max_request_body_size_mb * 1024 * 1024) as usize;
-    
+
     let app = Router::new()
         .nest("/api", api)
         // Serve embedded SPA at root with fallback
@@ -111,7 +109,7 @@ pub async fn start_server(
                 .layer(DefaultBodyLimit::max(body_size_limit)),
         );
 
-    let listener = tokio::net::TcpListener::bind(format!("{}:{}", bind, port)).await?;
+    let listener = tokio::net::TcpListener::bind(format!("{bind}:{port}")).await?;
     info!("User API server listening on {}:{}", bind, port);
 
     axum::serve(listener, app).await?;

@@ -103,8 +103,7 @@ async fn next_blocks_then_returns_when_pushed() {
     let correct_env_hash = fn_key().env_hash.clone();
     let fut: JoinHandle<_> = tokio::spawn(async move {
         let uri = format!(
-            "/2018-06-01/runtime/invocation/next?fn=hello&rt=nodejs18.x&ver=LATEST&eh={}",
-            correct_env_hash
+            "/2018-06-01/runtime/invocation/next?fn=hello&rt=nodejs18.x&ver=LATEST&eh={correct_env_hash}"
         );
         app_clone
             .oneshot(Request::get(uri).body(Body::empty()).unwrap())
@@ -155,8 +154,7 @@ async fn next_returns_json_200() {
 
     let correct_env_hash = fn_key().env_hash.clone();
     let uri = format!(
-        "/2018-06-01/runtime/invocation/next?fn=hello&rt=nodejs18.x&ver=LATEST&eh={}",
-        correct_env_hash
+        "/2018-06-01/runtime/invocation/next?fn=hello&rt=nodejs18.x&ver=LATEST&eh={correct_env_hash}"
     );
     let res = app
         .oneshot(Request::get(uri).body(Body::empty()).unwrap())
@@ -199,12 +197,9 @@ async fn runtime_response_delivers_and_returns_202() {
 
     // Call runtime_response
     let body = Body::from(Bytes::from_static(br#"{"ok":true}"#));
-    let req = Request::post(format!(
-        "/2018-06-01/runtime/invocation/{}/response",
-        req_id
-    ))
-    .body(body)
-    .unwrap();
+    let req = Request::post(format!("/2018-06-01/runtime/invocation/{req_id}/response"))
+        .body(body)
+        .unwrap();
 
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::ACCEPTED);
@@ -230,7 +225,7 @@ async fn runtime_error_delivers_with_kind_and_returns_202() {
     let rx = pending.register(req_id.clone());
 
     // Build request with X-Amz-Function-Error header
-    let mut req = Request::post(format!("/2018-06-01/runtime/invocation/{}/error", req_id))
+    let mut req = Request::post(format!("/2018-06-01/runtime/invocation/{req_id}/error"))
         .body(Body::from(Bytes::from_static(br#"{"boom":true}"#)))
         .unwrap();
     req.headers_mut()

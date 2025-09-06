@@ -71,8 +71,7 @@ fn test_zip_extraction() {
     }
 
     let temp_dir = tempdir().unwrap();
-    futures::executor::block_on(handler.extract_to_directory(&zip_data, temp_dir.path()))
-        .unwrap();
+    futures::executor::block_on(handler.extract_to_directory(&zip_data, temp_dir.path())).unwrap();
 
     let extracted_file = temp_dir.path().join("test.txt");
     assert!(extracted_file.exists());
@@ -88,59 +87,69 @@ fn test_zip_extraction_with_node_modules() {
     let mut zip_data = Vec::new();
     {
         let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut zip_data));
-        
+
         // Add package.json
         zip.start_file("package.json", zip::write::FileOptions::default())
             .unwrap();
-        zip.write_all(br#"{"name":"test-lambda","dependencies":{"axios":"^1.6.0"}}"#).unwrap();
-        
+        zip.write_all(br#"{"name":"test-lambda","dependencies":{"axios":"^1.6.0"}}"#)
+            .unwrap();
+
         // Add index.js
         zip.start_file("index.js", zip::write::FileOptions::default())
             .unwrap();
-        zip.write_all(b"exports.handler = async (event) => { return { statusCode: 200 }; };").unwrap();
-        
+        zip.write_all(b"exports.handler = async (event) => { return { statusCode: 200 }; };")
+            .unwrap();
+
         // Add node_modules directory structure
-        zip.add_directory("node_modules/", zip::write::FileOptions::default()).unwrap();
-        zip.add_directory("node_modules/axios/", zip::write::FileOptions::default()).unwrap();
-        
+        zip.add_directory("node_modules/", zip::write::FileOptions::default())
+            .unwrap();
+        zip.add_directory("node_modules/axios/", zip::write::FileOptions::default())
+            .unwrap();
+
         // Add axios package.json
-        zip.start_file("node_modules/axios/package.json", zip::write::FileOptions::default())
+        zip.start_file(
+            "node_modules/axios/package.json",
+            zip::write::FileOptions::default(),
+        )
+        .unwrap();
+        zip.write_all(br#"{"name":"axios","version":"1.6.0"}"#)
             .unwrap();
-        zip.write_all(br#"{"name":"axios","version":"1.6.0"}"#).unwrap();
-        
+
         // Add axios main file
-        zip.start_file("node_modules/axios/index.js", zip::write::FileOptions::default())
-            .unwrap();
+        zip.start_file(
+            "node_modules/axios/index.js",
+            zip::write::FileOptions::default(),
+        )
+        .unwrap();
         zip.write_all(b"module.exports = {};").unwrap();
-        
+
         zip.finish().unwrap();
     }
 
     let temp_dir = tempdir().unwrap();
-    futures::executor::block_on(handler.extract_to_directory(&zip_data, temp_dir.path()))
-        .unwrap();
+    futures::executor::block_on(handler.extract_to_directory(&zip_data, temp_dir.path())).unwrap();
 
     // Verify package.json was extracted
     let package_json = temp_dir.path().join("package.json");
     assert!(package_json.exists());
-    
+
     // Verify index.js was extracted
     let index_js = temp_dir.path().join("index.js");
     assert!(index_js.exists());
-    
+
     // Verify node_modules directory was created
     let node_modules = temp_dir.path().join("node_modules");
     assert!(node_modules.exists());
     assert!(node_modules.is_dir());
-    
+
     // Verify axios package was extracted
     let axios_dir = temp_dir.path().join("node_modules/axios");
     assert!(axios_dir.exists());
     assert!(axios_dir.is_dir());
-    
+
     let axios_package_json = temp_dir.path().join("node_modules/axios/package.json");
     assert!(axios_package_json.exists());
-    
+
     let axios_index = temp_dir.path().join("node_modules/axios/index.js");
     assert!(axios_index.exists());
 }

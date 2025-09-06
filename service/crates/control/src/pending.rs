@@ -39,6 +39,12 @@ pub struct Pending {
     inner: Arc<DashMap<String, oneshot::Sender<InvocationResult>>>,
 }
 
+impl Default for Pending {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Pending {
     pub fn new() -> Self {
         Self {

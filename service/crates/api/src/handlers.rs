@@ -18,6 +18,10 @@ use lambda_models::{
 use std::collections::HashMap;
 use tracing::{error, info, instrument};
 
+// Type aliases for complex return types
+type InvokeResponse =
+    Result<(StatusCode, HeaderMap, Json<serde_json::Value>), (StatusCode, Json<ErrorShape>)>;
+
 #[instrument(skip(state, payload))]
 pub async fn create_function(
     State(state): State<AppState>,
@@ -423,7 +427,7 @@ pub async fn invoke_function(
     Path(name): Path<String>,
     headers: HeaderMap,
     body: Bytes,
-) -> Result<(StatusCode, HeaderMap, Json<serde_json::Value>), (StatusCode, Json<ErrorShape>)> {
+) -> InvokeResponse {
     info!("Invoking function: {}", name);
     // Parse invocation type from headers
     let invocation_type = headers
@@ -601,19 +605,24 @@ pub async fn api_gateway_proxy(
 ) -> impl IntoResponse {
     let uri = req.uri().clone();
     let path = uri.path().to_string();
-    
+
     // Skip API routes that should be handled by explicit routes
-    if path.starts_with("/api/") || path.starts_with("/admin/") || path.starts_with("/healthz") || path.starts_with("/metrics") {
+    if path.starts_with("/api/")
+        || path.starts_with("/admin/")
+        || path.starts_with("/healthz")
+        || path.starts_with("/metrics")
+    {
         return (StatusCode::NOT_FOUND, Body::from("Not Found")).into_response();
     }
-    
+
     let mut segs = path.trim_start_matches('/').split('/');
     // First try to resolve via configured API routes (longest prefix, optional method)
     let method_str = req.method().to_string();
-    let resolved = match state.control.resolve_api_route(&method_str, &path).await {
-        Ok(r) => r,
-        Err(_) => None,
-    };
+    let resolved = state
+        .control
+        .resolve_api_route(&method_str, &path)
+        .await
+        .unwrap_or_default();
     let mut from_mapping = false;
     let func_name = if let Some(f) = resolved {
         from_mapping = true;
@@ -627,10 +636,8 @@ pub async fn api_gateway_proxy(
 
     // If no mapping was found and we're about to treat the first path segment as a function name,
     // verify that the function actually exists. If not, return a clean 404 instead of invoking.
-    if !from_mapping {
-        if state.control.get_function(&func_name).await.is_err() {
-            return (StatusCode::NOT_FOUND, Body::from("Not Found")).into_response();
-        }
+    if !from_mapping && state.control.get_function(&func_name).await.is_err() {
+        return (StatusCode::NOT_FOUND, Body::from("Not Found")).into_response();
     }
 
     // Build API Gateway proxy-like event
@@ -790,9 +797,7 @@ pub async fn get_docker_stats(State(state): State<AppState>) -> impl IntoRespons
 }
 
 #[instrument(skip(state))]
-pub async fn get_lambda_service_stats(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn get_lambda_service_stats(State(state): State<AppState>) -> impl IntoResponse {
     match state.control.get_lambda_service_stats().await {
         Ok(stats) => {
             info!("Successfully retrieved Lambda service statistics");

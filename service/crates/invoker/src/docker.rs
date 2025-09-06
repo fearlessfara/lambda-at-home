@@ -8,7 +8,10 @@ use bollard::Docker;
 use async_trait::async_trait;
 use bollard::models::{ContainerCreateResponse, HostConfig, RestartPolicy, RestartPolicyNameEnum};
 use futures_util::StreamExt;
-use lambda_models::{Config as AppConfig, Function, LambdaError, DockerStats, DockerSystemInfo, DockerDiskUsage, DockerVersion as LambdaDockerVersion};
+use lambda_models::{
+    Config as AppConfig, DockerDiskUsage, DockerStats, DockerSystemInfo,
+    DockerVersion as LambdaDockerVersion, Function, LambdaError,
+};
 use std::collections::HashMap;
 use tracing::{error, info, instrument};
 
@@ -97,7 +100,7 @@ impl Invoker {
 
         // Add custom environment variables
         for (key, value) in env_vars {
-            env.push(format!("{}={}", key, value));
+            env.push(format!("{key}={value}"));
         }
 
         // Security configuration
@@ -283,15 +286,24 @@ impl Invoker {
     #[instrument(skip(self))]
     pub async fn get_docker_stats(&self) -> anyhow::Result<DockerStats> {
         // Get system info
-        let system_info = self.docker.info().await
+        let system_info = self
+            .docker
+            .info()
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to get Docker system info: {}", e))?;
 
         // Get disk usage
-        let disk_usage = self.docker.df().await
+        let disk_usage = self
+            .docker
+            .df()
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to get Docker disk usage: {}", e))?;
 
         // Get version
-        let version = self.docker.version().await
+        let version = self
+            .docker
+            .version()
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to get Docker version: {}", e))?;
 
         // Convert to our models
@@ -311,8 +323,14 @@ impl Invoker {
             docker_root_dir: system_info.docker_root_dir.unwrap_or_default(),
             storage_driver: "unknown".to_string(), // Not available in SystemInfo
             logging_driver: system_info.logging_driver.unwrap_or_default(),
-            cgroup_driver: system_info.cgroup_driver.map(|e| e.to_string()).unwrap_or_default(),
-            cgroup_version: system_info.cgroup_version.map(|e| e.to_string()).unwrap_or_default(),
+            cgroup_driver: system_info
+                .cgroup_driver
+                .map(|e| e.to_string())
+                .unwrap_or_default(),
+            cgroup_version: system_info
+                .cgroup_version
+                .map(|e| e.to_string())
+                .unwrap_or_default(),
             n_events_listener: system_info.n_events_listener.unwrap_or(0),
             n_goroutines: system_info.n_goroutines.unwrap_or(0),
             system_time: system_info.system_time.unwrap_or_default(),
@@ -321,8 +339,11 @@ impl Invoker {
 
         let docker_disk_usage = DockerDiskUsage {
             layers_size: disk_usage.layers_size.unwrap_or(0) as u64,
-            images: disk_usage.images.unwrap_or_default().into_iter().map(|img| {
-                lambda_models::DockerImageUsage {
+            images: disk_usage
+                .images
+                .unwrap_or_default()
+                .into_iter()
+                .map(|img| lambda_models::DockerImageUsage {
                     id: img.id,
                     parent_id: img.parent_id,
                     repo_tags: img.repo_tags,
@@ -333,10 +354,13 @@ impl Invoker {
                     virtual_size: img.virtual_size.unwrap_or(0) as u64,
                     labels: img.labels,
                     containers: img.containers,
-                }
-            }).collect(),
-            containers: disk_usage.containers.unwrap_or_default().into_iter().map(|cont| {
-                lambda_models::DockerContainerUsage {
+                })
+                .collect(),
+            containers: disk_usage
+                .containers
+                .unwrap_or_default()
+                .into_iter()
+                .map(|cont| lambda_models::DockerContainerUsage {
                     id: cont.id.unwrap_or_default(),
                     names: cont.names.unwrap_or_default(),
                     image: cont.image.unwrap_or_default(),
@@ -348,22 +372,30 @@ impl Invoker {
                     labels: cont.labels.unwrap_or_default(),
                     state: cont.state.unwrap_or_default(),
                     status: cont.status.unwrap_or_default(),
-                }
-            }).collect(),
-            volumes: disk_usage.volumes.unwrap_or_default().into_iter().map(|vol| {
-                lambda_models::DockerVolumeUsage {
-                    name: vol.name,
-                    driver: vol.driver,
-                    mountpoint: vol.mountpoint,
-                    created_at: vol.created_at.unwrap_or_default(),
-                    size: 0, // Not available in Volume
-                    labels: vol.labels,
-                    scope: vol.scope.map(|e| e.to_string()).unwrap_or_default(),
-                    options: vol.options,
-                }
-            }).collect(),
-            build_cache: disk_usage.build_cache.unwrap_or_default().into_iter().map(|cache| {
-                lambda_models::DockerBuildCacheUsage {
+                })
+                .collect(),
+            volumes: disk_usage
+                .volumes
+                .unwrap_or_default()
+                .into_iter()
+                .map(|vol| {
+                    lambda_models::DockerVolumeUsage {
+                        name: vol.name,
+                        driver: vol.driver,
+                        mountpoint: vol.mountpoint,
+                        created_at: vol.created_at.unwrap_or_default(),
+                        size: 0, // Not available in Volume
+                        labels: vol.labels,
+                        scope: vol.scope.map(|e| e.to_string()).unwrap_or_default(),
+                        options: vol.options,
+                    }
+                })
+                .collect(),
+            build_cache: disk_usage
+                .build_cache
+                .unwrap_or_default()
+                .into_iter()
+                .map(|cache| lambda_models::DockerBuildCacheUsage {
                     id: cache.id.unwrap_or_default(),
                     parent: cache.parent.unwrap_or_default(),
                     r#type: cache.typ.map(|e| e.to_string()).unwrap_or_default(),
@@ -374,8 +406,8 @@ impl Invoker {
                     created_at: cache.created_at.unwrap_or_default(),
                     last_used_at: cache.last_used_at,
                     usage_count: cache.usage_count.unwrap_or(0),
-                }
-            }).collect(),
+                })
+                .collect(),
         };
 
         let docker_version = LambdaDockerVersion {
@@ -387,7 +419,7 @@ impl Invoker {
             os: version.os.unwrap_or_default(),
             arch: version.arch.unwrap_or_default(),
             kernel_version: version.kernel_version.unwrap_or_default(),
-            experimental: version.experimental.map(|e| e.to_string() == "true").unwrap_or(false),
+            experimental: version.experimental.map(|e| e == "true").unwrap_or(false),
             build_time: version.build_time.unwrap_or_default(),
         };
 

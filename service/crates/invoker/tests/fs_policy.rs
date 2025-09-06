@@ -58,6 +58,54 @@ impl DockerLike for FakeDocker {
     async fn inspect_running(&self, _container_id: &str) -> anyhow::Result<bool> {
         Ok(*self.running.lock().await)
     }
+    async fn get_docker_stats(&self) -> anyhow::Result<lambda_models::DockerStats> {
+        // Return a mock DockerStats for testing
+        Ok(lambda_models::DockerStats {
+            system_info: lambda_models::DockerSystemInfo {
+                containers: 0,
+                containers_running: 0,
+                containers_paused: 0,
+                containers_stopped: 0,
+                images: 0,
+                driver: "test".to_string(),
+                memory_total: 0,
+                memory_available: 0,
+                cpu_count: 0,
+                kernel_version: "test".to_string(),
+                operating_system: "test".to_string(),
+                architecture: "test".to_string(),
+                docker_root_dir: "/test".to_string(),
+                storage_driver: "test".to_string(),
+                logging_driver: "test".to_string(),
+                cgroup_driver: "test".to_string(),
+                cgroup_version: "test".to_string(),
+                n_events_listener: 0,
+                n_goroutines: 0,
+                system_time: "test".to_string(),
+                server_version: "test".to_string(),
+            },
+            disk_usage: lambda_models::DockerDiskUsage {
+                layers_size: 0,
+                images: vec![],
+                containers: vec![],
+                volumes: vec![],
+                build_cache: vec![],
+            },
+            version: lambda_models::DockerVersion {
+                version: "test".to_string(),
+                api_version: "test".to_string(),
+                min_api_version: "test".to_string(),
+                git_commit: "test".to_string(),
+                go_version: "test".to_string(),
+                os: "test".to_string(),
+                arch: "test".to_string(),
+                kernel_version: "test".to_string(),
+                experimental: false,
+                build_time: "test".to_string(),
+            },
+            cache_stats: None,
+        })
+    }
 }
 
 #[tokio::test]

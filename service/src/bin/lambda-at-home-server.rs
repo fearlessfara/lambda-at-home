@@ -6,19 +6,16 @@ use lambda_metrics::MetricsService;
 use lambda_models::Config;
 use sqlx::SqlitePool;
 use std::fs;
+use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::signal;
 use tracing::{info, warn};
-use std::io::Read;
 
 fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
     // Try to load from service/configs/default.toml first, then configs/default.toml
-    let config_paths = [
-        "service/configs/default.toml",
-        "configs/default.toml",
-    ];
-    
+    let config_paths = ["service/configs/default.toml", "configs/default.toml"];
+
     for path in &config_paths {
         if Path::new(path).exists() {
             let mut file = fs::File::open(path)?;
@@ -28,7 +25,7 @@ fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
             return Ok(config);
         }
     }
-    
+
     Err("No config file found".into())
 }
 
@@ -59,11 +56,11 @@ async fn main() -> Result<()> {
     } else {
         format!("service/{}", config.data.dir)
     };
-    
+
     if !data_dir.is_empty() {
         let _ = fs::create_dir_all(&data_dir);
     }
-    
+
     let db_url = if config.data.db_url.starts_with("sqlite://service/") {
         config.data.db_url.clone()
     } else if config.data.db_url.starts_with("sqlite://") {
@@ -71,7 +68,7 @@ async fn main() -> Result<()> {
     } else {
         config.data.db_url.clone()
     };
-    
+
     if let Some(db_path) = db_url.strip_prefix("sqlite://") {
         if let Some(parent) = Path::new(db_path).parent() {
             if let Err(e) = fs::create_dir_all(parent) {

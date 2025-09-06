@@ -25,9 +25,15 @@ pub fn prom_parse(text: &str) -> Result<Metrics> {
         }
 
         if let Some((name, value)) = parse_metric_line(line) {
-            if name.ends_with("_total") || name.ends_with("_count") {
+            if name.ends_with("_total") {
                 // Counter
                 metrics.counters.insert(name, value);
+            } else if name.ends_with("_count") {
+                // Histogram count - store in both counters and histograms
+                metrics.counters.insert(name.clone(), value);
+                let base_name = name.strip_suffix("_count").unwrap_or(&name);
+                let histogram = metrics.histograms.entry(base_name.to_string()).or_default();
+                histogram.count = value;
             } else if name.ends_with("_sum") {
                 // Histogram sum
                 let base_name = name.strip_suffix("_sum").unwrap_or(&name);
@@ -70,4 +76,3 @@ fn extract_bucket_name(metric_name: &str) -> String {
     }
     "unknown".to_string()
 }
-

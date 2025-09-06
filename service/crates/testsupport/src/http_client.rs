@@ -23,7 +23,7 @@ impl LambdaClient {
     pub async fn create_function(&self, request: CreateFunctionRequest) -> Result<Function> {
         let response = self
             .client
-            .post(&format!("{}/2015-03-31/functions", self.base_url))
+            .post(format!("{}/2015-03-31/functions", self.base_url))
             .json(&request)
             .send()
             .await?;
@@ -39,7 +39,7 @@ impl LambdaClient {
     pub async fn get_function(&self, name: &str) -> Result<Function> {
         let response = self
             .client
-            .get(&format!("{}/2015-03-31/functions/{}", self.base_url, name))
+            .get(format!("{}/2015-03-31/functions/{}", self.base_url, name))
             .send()
             .await?;
 
@@ -54,7 +54,7 @@ impl LambdaClient {
     pub async fn delete_function(&self, name: &str) -> Result<()> {
         let response = self
             .client
-            .delete(&format!("{}/2015-03-31/functions/{}", self.base_url, name))
+            .delete(format!("{}/2015-03-31/functions/{}", self.base_url, name))
             .send()
             .await?;
 
@@ -73,7 +73,7 @@ impl LambdaClient {
     ) -> Result<Function> {
         let response = self
             .client
-            .put(&format!(
+            .put(format!(
                 "{}/2015-03-31/functions/{}/code",
                 self.base_url, name
             ))
@@ -96,7 +96,7 @@ impl LambdaClient {
     ) -> Result<Function> {
         let response = self
             .client
-            .put(&format!(
+            .put(format!(
                 "{}/2015-03-31/functions/{}/configuration",
                 self.base_url, name
             ))
@@ -119,7 +119,7 @@ impl LambdaClient {
     ) -> Result<Version> {
         let response = self
             .client
-            .post(&format!(
+            .post(format!(
                 "{}/2015-03-31/functions/{}/versions",
                 self.base_url, name
             ))
@@ -138,7 +138,7 @@ impl LambdaClient {
     pub async fn create_alias(&self, name: &str, request: CreateAliasRequest) -> Result<Alias> {
         let response = self
             .client
-            .post(&format!(
+            .post(format!(
                 "{}/2015-03-31/functions/{}/aliases",
                 self.base_url, name
             ))
@@ -162,7 +162,7 @@ impl LambdaClient {
     ) -> Result<Alias> {
         let response = self
             .client
-            .put(&format!(
+            .put(format!(
                 "{}/2015-03-31/functions/{}/aliases/{}",
                 self.base_url, name, alias
             ))
@@ -181,7 +181,7 @@ impl LambdaClient {
     pub async fn delete_alias(&self, name: &str, alias: &str) -> Result<()> {
         let response = self
             .client
-            .delete(&format!(
+            .delete(format!(
                 "{}/2015-03-31/functions/{}/aliases/{}",
                 self.base_url, name, alias
             ))
@@ -199,7 +199,7 @@ impl LambdaClient {
     pub async fn put_concurrency(&self, name: &str, config: ConcurrencyConfig) -> Result<()> {
         let response = self
             .client
-            .put(&format!(
+            .put(format!(
                 "{}/2015-03-31/functions/{}/concurrency",
                 self.base_url, name
             ))
@@ -223,7 +223,7 @@ impl LambdaClient {
     ) -> Result<InvokeResponse> {
         let mut request = self
             .client
-            .post(&format!(
+            .post(format!(
                 "{}/2015-03-31/functions/{}/invocations",
                 self.base_url, name
             ))

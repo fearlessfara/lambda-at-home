@@ -128,4 +128,3 @@ pub fn plan_scale(queue_size: usize, warm_idle: usize, stopped: usize) -> (usize
     let create = need - restart;
     (restart, create)
 }
-

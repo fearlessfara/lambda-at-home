@@ -60,7 +60,6 @@ ENTRYPOINT ["/var/runtime/bootstrap.sh"]
 
 # Set user
 USER 1000:1000
-"#,
-        tag = tag
+"#
     )
 }

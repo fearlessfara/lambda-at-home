@@ -92,7 +92,7 @@ impl PackagingCache {
 
         if !zip_path.exists() {
             return Err(LambdaError::InvalidRequest {
-                reason: format!("ZIP file not found: {}", sha256),
+                reason: format!("ZIP file not found: {sha256}"),
             });
         }
 

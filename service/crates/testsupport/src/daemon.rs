@@ -57,11 +57,11 @@ pub async fn spawn_daemon(config_override: Option<ConfigOverride>) -> Result<Tes
 
     // Override data directory
     config.data.dir = data_path.to_string();
-    config.data.db_url = format!("sqlite://{}/lhome.db", data_path);
+    config.data.db_url = format!("sqlite://{data_path}/lhome.db");
 
     // Start the daemon with environment variables
     let mut cmd = Command::new("cargo");
-    cmd.args(&["run", "--bin", "lambda-at-home-server"]);
+    cmd.args(["run", "--bin", "lambda-at-home-server"]);
     cmd.env("LAMBDA_DATA_DIR", data_path.as_ref());
     cmd.env("LAMBDA_DB_URL", &config.data.db_url);
     cmd.env(

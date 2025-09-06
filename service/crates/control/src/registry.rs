@@ -9,12 +9,12 @@ use crate::warm_pool::WarmPool;
 use base64;
 use chrono::Utc;
 use lambda_models::{
-    Alias, ApiRoute, ConcurrencyConfig, CreateAliasRequest, CreateApiRouteRequest,
-    CreateFunctionRequest, Function, FunctionError, FunctionState, InitError, InvokeRequest,
-    InvokeResponse, LambdaError, ListAliasesResponse, ListApiRoutesResponse, ListFunctionsResponse,
-    ListVersionsResponse, PublishVersionRequest, RoutingConfig, RuntimeError, RuntimeInvocation,
-    RuntimeResponse, UpdateAliasRequest, UpdateFunctionCodeRequest,
-    UpdateFunctionConfigurationRequest, Version, DockerStats, CacheStats, CacheTypeStats,
+    Alias, ApiRoute, CacheStats, CacheTypeStats, ConcurrencyConfig, CreateAliasRequest,
+    CreateApiRouteRequest, CreateFunctionRequest, DockerStats, Function, FunctionError,
+    FunctionState, InitError, InvokeRequest, InvokeResponse, LambdaError, ListAliasesResponse,
+    ListApiRoutesResponse, ListFunctionsResponse, ListVersionsResponse, PublishVersionRequest,
+    RoutingConfig, RuntimeError, RuntimeInvocation, RuntimeResponse, UpdateAliasRequest,
+    UpdateFunctionCodeRequest, UpdateFunctionConfigurationRequest, Version,
 };
 use sqlx::{Row, SqlitePool};
 use std::collections::HashMap;
@@ -53,7 +53,7 @@ impl ControlPlane {
         let (scheduler, rx) = Scheduler::new();
         let warm_pool = Arc::new(WarmPool::new());
         let concurrency_manager = Arc::new(ConcurrencyManager::new());
-        
+
         // Initialize cache with configurable TTL (default 5 minutes)
         let cache_ttl = std::time::Duration::from_secs(300);
         let cache = Arc::new(FunctionCache::new(cache_ttl, 1000));
@@ -141,14 +141,14 @@ impl ControlPlane {
         sqlx::query(
             "INSERT INTO api_routes (route_id, path, method, function_name, created_at) VALUES (?, ?, ?, ?, ?)"
         )
-        .bind(&route_id)
+        .bind(route_id)
         .bind(&path)
         .bind(&method)
         .bind(&req.function_name)
-        .bind(&created_at)
+        .bind(created_at)
         .execute(&self.pool)
         .await
-        .map_err(|e| LambdaError::SqlxError(e))?;
+        .map_err(LambdaError::SqlxError)?;
 
         Ok(ApiRoute {
             route_id,
@@ -163,23 +163,17 @@ impl ControlPlane {
         let rows = sqlx::query("SELECT * FROM api_routes ORDER BY path")
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| LambdaError::SqlxError(e))?;
+            .map_err(LambdaError::SqlxError)?;
         let mut routes = Vec::with_capacity(rows.len());
         for row in rows.iter() {
             routes.push(ApiRoute {
-                route_id: row
-                    .try_get("route_id")
-                    .map_err(|e| LambdaError::SqlxError(e))?,
-                path: row.try_get("path").map_err(|e| LambdaError::SqlxError(e))?,
-                method: row
-                    .try_get("method")
-                    .map_err(|e| LambdaError::SqlxError(e))?,
+                route_id: row.try_get("route_id").map_err(LambdaError::SqlxError)?,
+                path: row.try_get("path").map_err(LambdaError::SqlxError)?,
+                method: row.try_get("method").map_err(LambdaError::SqlxError)?,
                 function_name: row
                     .try_get("function_name")
-                    .map_err(|e| LambdaError::SqlxError(e))?,
-                created_at: row
-                    .try_get("created_at")
-                    .map_err(|e| LambdaError::SqlxError(e))?,
+                    .map_err(LambdaError::SqlxError)?,
+                created_at: row.try_get("created_at").map_err(LambdaError::SqlxError)?,
             });
         }
         Ok(ListApiRoutesResponse { routes })
@@ -190,7 +184,7 @@ impl ControlPlane {
             .bind(route_id)
             .execute(&self.pool)
             .await
-            .map_err(|e| LambdaError::SqlxError(e))?;
+            .map_err(LambdaError::SqlxError)?;
         if result.rows_affected() == 0 {
             return Err(LambdaError::InvalidRequest {
                 reason: "Route not found".to_string(),
@@ -209,16 +203,14 @@ impl ControlPlane {
         let rows = sqlx::query("SELECT path, method, function_name FROM api_routes")
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| LambdaError::SqlxError(e))?;
+            .map_err(LambdaError::SqlxError)?;
         let mut best: Option<(usize, String)> = None;
         for row in rows.iter() {
-            let r_path: String = row.try_get("path").map_err(|e| LambdaError::SqlxError(e))?;
-            let r_method: Option<String> = row
-                .try_get("method")
-                .map_err(|e| LambdaError::SqlxError(e))?;
+            let r_path: String = row.try_get("path").map_err(LambdaError::SqlxError)?;
+            let r_method: Option<String> = row.try_get("method").map_err(LambdaError::SqlxError)?;
             let fname: String = row
                 .try_get("function_name")
-                .map_err(|e| LambdaError::SqlxError(e))?;
+                .map_err(LambdaError::SqlxError)?;
             if !norm_path.starts_with(&r_path) {
                 continue;
             }
@@ -270,7 +262,7 @@ impl ControlPlane {
             let zip_data =
                 base64::Engine::decode(&base64::engine::general_purpose::STANDARD, zip_file_base64)
                     .map_err(|e| LambdaError::InvalidRequest {
-                        reason: format!("Invalid base64 ZIP data: {}", e),
+                        reason: format!("Invalid base64 ZIP data: {e}"),
                     })?;
 
             // Process the ZIP file
@@ -314,7 +306,7 @@ impl ControlPlane {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
-        .bind(&function.function_id)
+        .bind(function.function_id)
         .bind(&function.function_name)
         .bind(&function.runtime)
         .bind(&function.role)
@@ -324,7 +316,7 @@ impl ControlPlane {
         .bind(function.timeout as i64)
         .bind(function.memory_size as i64)
         .bind(serde_json::to_string(&function.environment).unwrap_or_default())
-        .bind(&function.last_modified)
+        .bind(function.last_modified)
         .bind(function.code_size as i64)
         .bind(&function.version)
         .bind(serde_json::to_string(&function.state).unwrap_or_default())
@@ -332,7 +324,7 @@ impl ControlPlane {
         .bind(&function.state_reason_code)
         .execute(&self.pool)
         .await
-        .map_err(|e| LambdaError::SqlxError(e))?;
+        .map_err(LambdaError::SqlxError)?;
 
         info!(
             "Created function: {} with code SHA256: {}",
@@ -353,16 +345,16 @@ impl ControlPlane {
             .bind(name)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| LambdaError::SqlxError(e))?
+            .map_err(LambdaError::SqlxError)?
             .ok_or_else(|| LambdaError::FunctionNotFound {
                 function_name: name.to_string(),
             })?;
 
         let function = self.row_to_function(&row)?;
-        
+
         // Cache the result
         self.cache.set_function(name.to_string(), function.clone());
-        
+
         Ok(function)
     }
 
@@ -370,12 +362,12 @@ impl ControlPlane {
     pub async fn delete_function(&self, name: &str) -> Result<(), LambdaError> {
         // Get function first to get function_id for cache invalidation
         let function = self.get_function(name).await.ok();
-        
+
         let result = sqlx::query("DELETE FROM functions WHERE function_name = ?")
             .bind(name)
             .execute(&self.pool)
             .await
-            .map_err(|e| LambdaError::SqlxError(e))?;
+            .map_err(LambdaError::SqlxError)?;
 
         if result.rows_affected() == 0 {
             return Err(LambdaError::FunctionNotFound {
@@ -386,8 +378,10 @@ impl ControlPlane {
         // Invalidate cache
         self.cache.invalidate_function(name);
         if let Some(func) = function {
-            self.cache.invalidate_concurrency(&func.function_id.to_string());
-            self.cache.invalidate_env_vars(&func.function_id.to_string());
+            self.cache
+                .invalidate_concurrency(&func.function_id.to_string());
+            self.cache
+                .invalidate_env_vars(&func.function_id.to_string());
         }
 
         info!("Deleted function: {}", name);
@@ -408,7 +402,7 @@ impl ControlPlane {
             .bind(offset)
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| LambdaError::SqlxError(e))?;
+            .map_err(LambdaError::SqlxError)?;
 
         let functions: Result<Vec<Function>, LambdaError> =
             rows.iter().map(|row| self.row_to_function(row)).collect();
@@ -436,15 +430,16 @@ impl ControlPlane {
         function.last_modified = Utc::now();
 
         sqlx::query("UPDATE functions SET last_modified = ? WHERE function_name = ?")
-            .bind(&function.last_modified)
+            .bind(function.last_modified)
             .bind(name)
             .execute(&self.pool)
             .await
-            .map_err(|e| LambdaError::SqlxError(e))?;
+            .map_err(LambdaError::SqlxError)?;
 
         // Invalidate cache since function was updated
         self.cache.invalidate_function(name);
-        self.cache.invalidate_env_vars(&function.function_id.to_string());
+        self.cache
+            .invalidate_env_vars(&function.function_id.to_string());
 
         Ok(function)
     }
@@ -493,11 +488,11 @@ impl ControlPlane {
         .bind(function.timeout as i64)
         .bind(function.memory_size as i64)
         .bind(serde_json::to_string(&function.environment).unwrap_or_default())
-        .bind(&function.last_modified)
+        .bind(function.last_modified)
         .bind(name)
         .execute(&self.pool)
         .await
-        .map_err(|e| LambdaError::SqlxError(e))?;
+        .map_err(LambdaError::SqlxError)?;
 
         // If env is updated, drain existing warm containers so new env applies immediately
         if env_will_change {
@@ -512,7 +507,8 @@ impl ControlPlane {
 
         // Invalidate cache since function configuration was updated
         self.cache.invalidate_function(name);
-        self.cache.invalidate_env_vars(&function.function_id.to_string());
+        self.cache
+            .invalidate_env_vars(&function.function_id.to_string());
 
         Ok(function)
     }
@@ -545,16 +541,16 @@ impl ControlPlane {
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
             "#,
         )
-        .bind(&version.version_id)
-        .bind(&version.function_id)
+        .bind(version.version_id)
+        .bind(version.function_id)
         .bind(&version.version)
         .bind(&version.description)
         .bind(&version.code_sha256)
-        .bind(&version.last_modified)
+        .bind(version.last_modified)
         .bind(version.code_size as i64)
         .execute(&self.pool)
         .await
-        .map_err(|e| LambdaError::SqlxError(e))?;
+        .map_err(LambdaError::SqlxError)?;
 
         Ok(version)
     }
@@ -573,12 +569,12 @@ impl ControlPlane {
         let rows = sqlx::query(
             "SELECT * FROM versions WHERE function_id = ? ORDER BY version LIMIT ? OFFSET ?",
         )
-        .bind(&function.function_id)
+        .bind(function.function_id)
         .bind(limit)
         .bind(offset)
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| LambdaError::SqlxError(e))?;
+        .map_err(LambdaError::SqlxError)?;
 
         let versions: Result<Vec<Version>, LambdaError> =
             rows.iter().map(|row| self.row_to_version(row)).collect();
@@ -624,17 +620,17 @@ impl ControlPlane {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
-        .bind(&alias.alias_id)
-        .bind(&alias.function_id)
+        .bind(alias.alias_id)
+        .bind(alias.function_id)
         .bind(&alias.name)
         .bind(&alias.function_version)
         .bind(&alias.description)
         .bind(serde_json::to_string(&alias.routing_config).unwrap_or_default())
         .bind(&alias.revision_id)
-        .bind(&alias.last_modified)
+        .bind(alias.last_modified)
         .execute(&self.pool)
         .await
-        .map_err(|e| LambdaError::SqlxError(e))?;
+        .map_err(LambdaError::SqlxError)?;
 
         Ok(alias)
     }
@@ -644,16 +640,16 @@ impl ControlPlane {
         let function = self.get_function(name).await?;
 
         let row = sqlx::query("SELECT * FROM aliases WHERE function_id = ? AND name = ?")
-            .bind(&function.function_id)
+            .bind(function.function_id)
             .bind(alias)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| LambdaError::SqlxError(e))?
+            .map_err(LambdaError::SqlxError)?
             .ok_or_else(|| LambdaError::FunctionNotFound {
-                function_name: format!("{}/{}", name, alias),
+                function_name: format!("{name}/{alias}"),
             })?;
 
-        Ok(self.row_to_alias(&row)?)
+        self.row_to_alias(&row)
     }
 
     #[instrument(skip(self))]
@@ -690,12 +686,12 @@ impl ControlPlane {
         .bind(&alias_obj.description)
         .bind(serde_json::to_string(&alias_obj.routing_config).unwrap_or_default())
         .bind(&alias_obj.revision_id)
-        .bind(&alias_obj.last_modified)
-        .bind(&alias_obj.function_id)
+        .bind(alias_obj.last_modified)
+        .bind(alias_obj.function_id)
         .bind(alias)
         .execute(&self.pool)
         .await
-        .map_err(|e| LambdaError::SqlxError(e))?;
+        .map_err(LambdaError::SqlxError)?;
 
         Ok(alias_obj)
     }
@@ -705,15 +701,15 @@ impl ControlPlane {
         let function = self.get_function(name).await?;
 
         let result = sqlx::query("DELETE FROM aliases WHERE function_id = ? AND name = ?")
-            .bind(&function.function_id)
+            .bind(function.function_id)
             .bind(alias)
             .execute(&self.pool)
             .await
-            .map_err(|e| LambdaError::SqlxError(e))?;
+            .map_err(LambdaError::SqlxError)?;
 
         if result.rows_affected() == 0 {
             return Err(LambdaError::FunctionNotFound {
-                function_name: format!("{}/{}", name, alias),
+                function_name: format!("{name}/{alias}"),
             });
         }
 
@@ -734,12 +730,12 @@ impl ControlPlane {
         let rows = sqlx::query(
             "SELECT * FROM aliases WHERE function_id = ? ORDER BY name LIMIT ? OFFSET ?",
         )
-        .bind(&function.function_id)
+        .bind(function.function_id)
         .bind(limit)
         .bind(offset)
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| LambdaError::SqlxError(e))?;
+        .map_err(LambdaError::SqlxError)?;
 
         let aliases: Result<Vec<Alias>, LambdaError> =
             rows.iter().map(|row| self.row_to_alias(row)).collect();
@@ -770,26 +766,27 @@ impl ControlPlane {
                VALUES(?, ?, ?)
                ON CONFLICT(function_id) DO UPDATE SET reserved_concurrent_executions = excluded.reserved_concurrent_executions, updated_at = excluded.updated_at"#
         )
-        .bind(&func.function_id)
+        .bind(func.function_id)
         .bind(reserved)
-        .bind(&now)
+        .bind(now)
         .execute(&self.pool)
         .await
-        .map_err(|e| LambdaError::SqlxError(e))?;
+        .map_err(LambdaError::SqlxError)?;
         // Update in-memory limiter
         self.concurrency_manager
             .set_reserved_limit(func.function_id, config.reserved_concurrent_executions);
-        
+
         // Invalidate cache since concurrency config was updated
-        self.cache.invalidate_concurrency(&func.function_id.to_string());
-        
+        self.cache
+            .invalidate_concurrency(&func.function_id.to_string());
+
         Ok(())
     }
 
     #[instrument(skip(self))]
     pub async fn get_concurrency(&self, name: &str) -> Result<ConcurrencyConfig, LambdaError> {
         let func = self.get_function(name).await?;
-        
+
         // Try cache first
         if let Some(cached_config) = self.cache.get_concurrency(&func.function_id.to_string()) {
             return Ok(cached_config);
@@ -799,19 +796,20 @@ impl ControlPlane {
         let reserved: Option<i64> = sqlx::query_scalar(
             "SELECT reserved_concurrent_executions FROM function_concurrency WHERE function_id = ?",
         )
-        .bind(&func.function_id)
+        .bind(func.function_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| LambdaError::SqlxError(e))?
+        .map_err(LambdaError::SqlxError)?
         .flatten();
-        
+
         let config = ConcurrencyConfig {
             reserved_concurrent_executions: reserved.map(|v| v as u32),
         };
-        
+
         // Cache the result
-        self.cache.set_concurrency(func.function_id.to_string(), config.clone());
-        
+        self.cache
+            .set_concurrency(func.function_id.to_string(), config.clone());
+
         Ok(config)
     }
 
@@ -819,16 +817,17 @@ impl ControlPlane {
     pub async fn delete_concurrency(&self, name: &str) -> Result<(), LambdaError> {
         let func = self.get_function(name).await?;
         let _ = sqlx::query("DELETE FROM function_concurrency WHERE function_id = ?")
-            .bind(&func.function_id)
+            .bind(func.function_id)
             .execute(&self.pool)
             .await
-            .map_err(|e| LambdaError::SqlxError(e))?;
+            .map_err(LambdaError::SqlxError)?;
         self.concurrency_manager
             .set_reserved_limit(func.function_id, None);
-        
+
         // Invalidate cache since concurrency config was deleted
-        self.cache.invalidate_concurrency(&func.function_id.to_string());
-        
+        self.cache
+            .invalidate_concurrency(&func.function_id.to_string());
+
         Ok(())
     }
 
@@ -975,7 +974,7 @@ impl ControlPlane {
             .enqueue(work_item)
             .await
             .map_err(|e| LambdaError::InternalError {
-                reason: format!("Failed to enqueue work item: {}", e),
+                reason: format!("Failed to enqueue work item: {e}"),
             })?;
 
         // 8) Wait for result with buffer: 10 seconds for container startup and execution
@@ -1018,11 +1017,12 @@ impl ControlPlane {
             Ok(Err(_canceled)) => {
                 // Runtime channel dropped → 200 with X-Amz-Function-Error: InitError
                 error!("Runtime channel closed for invocation: {}", req_id);
-                
+
                 // Record init error in execution record (deferred async)
                 let end_time = chrono::Utc::now();
-                self.execution_tracker.record_execution_init_error(req_id.clone(), end_time);
-                
+                self.execution_tracker
+                    .record_execution_init_error(req_id.clone(), end_time);
+
                 Ok(InvokeResponse {
                     status_code: 200,
                     payload: Some(serde_json::json!({
@@ -1049,7 +1049,8 @@ impl ControlPlane {
 
                 // Record timeout in execution record (deferred async)
                 let end_time = chrono::Utc::now();
-                self.execution_tracker.record_execution_timeout(req_id.clone(), end_time);
+                self.execution_tracker
+                    .record_execution_timeout(req_id.clone(), end_time);
 
                 Ok(InvokeResponse {
                     status_code: 200,
@@ -1149,8 +1150,9 @@ impl ControlPlane {
         if success {
             // Record successful execution completion (deferred async)
             let end_time = chrono::Utc::now();
-            self.execution_tracker.record_execution_success(request_id.clone(), end_time);
-            
+            self.execution_tracker
+                .record_execution_success(request_id.clone(), end_time);
+
             info!("Successfully completed invocation: {}", request_id);
             Ok(())
         } else {
@@ -1212,7 +1214,7 @@ impl ControlPlane {
                 error.error_type.clone(),
                 end_time,
             );
-            
+
             info!("Successfully completed error invocation: {}", request_id);
             Ok(())
         } else {
@@ -1250,7 +1252,7 @@ impl ControlPlane {
 
     fn is_valid_function_name(&self, name: &str) -> bool {
         // AWS Lambda function name validation rules
-        name.len() >= 1
+        !name.is_empty()
             && name.len() <= 64
             && name
                 .chars()
@@ -1267,7 +1269,7 @@ impl ControlPlane {
                 .bind(name)
                 .fetch_one(&self.pool)
                 .await
-                .map_err(|e| LambdaError::SqlxError(e))?;
+                .map_err(LambdaError::SqlxError)?;
 
         Ok(count > 0)
     }
@@ -1275,119 +1277,89 @@ impl ControlPlane {
     fn row_to_function(&self, row: &sqlx::sqlite::SqliteRow) -> Result<Function, LambdaError> {
         let environment: HashMap<String, String> = serde_json::from_str(
             row.try_get::<String, _>("environment")
-                .map_err(|e| LambdaError::SqlxError(e))?
+                .map_err(LambdaError::SqlxError)?
                 .as_str(),
         )
         .unwrap_or_default();
 
         let state: FunctionState = serde_json::from_str(
             row.try_get::<String, _>("state")
-                .map_err(|e| LambdaError::SqlxError(e))?
+                .map_err(LambdaError::SqlxError)?
                 .as_str(),
         )
         .unwrap_or(FunctionState::Pending);
 
         Ok(Function {
-            function_id: row
-                .try_get("function_id")
-                .map_err(|e| LambdaError::SqlxError(e))?,
+            function_id: row.try_get("function_id").map_err(LambdaError::SqlxError)?,
             function_name: row
                 .try_get("function_name")
-                .map_err(|e| LambdaError::SqlxError(e))?,
-            runtime: row
-                .try_get("runtime")
-                .map_err(|e| LambdaError::SqlxError(e))?,
-            role: row.try_get("role").map_err(|e| LambdaError::SqlxError(e))?,
-            handler: row
-                .try_get("handler")
-                .map_err(|e| LambdaError::SqlxError(e))?,
-            code_sha256: row
-                .try_get("code_sha256")
-                .map_err(|e| LambdaError::SqlxError(e))?,
-            description: row
-                .try_get("description")
-                .map_err(|e| LambdaError::SqlxError(e))?,
+                .map_err(LambdaError::SqlxError)?,
+            runtime: row.try_get("runtime").map_err(LambdaError::SqlxError)?,
+            role: row.try_get("role").map_err(LambdaError::SqlxError)?,
+            handler: row.try_get("handler").map_err(LambdaError::SqlxError)?,
+            code_sha256: row.try_get("code_sha256").map_err(LambdaError::SqlxError)?,
+            description: row.try_get("description").map_err(LambdaError::SqlxError)?,
             timeout: row
                 .try_get::<i64, _>("timeout")
-                .map_err(|e| LambdaError::SqlxError(e))? as u64,
+                .map_err(LambdaError::SqlxError)? as u64,
             memory_size: row
                 .try_get::<i64, _>("memory_size")
-                .map_err(|e| LambdaError::SqlxError(e))? as u64,
+                .map_err(LambdaError::SqlxError)? as u64,
             environment,
             last_modified: row
                 .try_get("last_modified")
-                .map_err(|e| LambdaError::SqlxError(e))?,
+                .map_err(LambdaError::SqlxError)?,
             code_size: row
                 .try_get::<i64, _>("code_size")
-                .map_err(|e| LambdaError::SqlxError(e))? as u64,
-            version: row
-                .try_get("version")
-                .map_err(|e| LambdaError::SqlxError(e))?,
+                .map_err(LambdaError::SqlxError)? as u64,
+            version: row.try_get("version").map_err(LambdaError::SqlxError)?,
             state,
             state_reason: row
                 .try_get("state_reason")
-                .map_err(|e| LambdaError::SqlxError(e))?,
+                .map_err(LambdaError::SqlxError)?,
             state_reason_code: row
                 .try_get("state_reason_code")
-                .map_err(|e| LambdaError::SqlxError(e))?,
+                .map_err(LambdaError::SqlxError)?,
         })
     }
 
     fn row_to_version(&self, row: &sqlx::sqlite::SqliteRow) -> Result<Version, LambdaError> {
         Ok(Version {
-            version_id: row
-                .try_get("version_id")
-                .map_err(|e| LambdaError::SqlxError(e))?,
-            function_id: row
-                .try_get("function_id")
-                .map_err(|e| LambdaError::SqlxError(e))?,
-            version: row
-                .try_get("version")
-                .map_err(|e| LambdaError::SqlxError(e))?,
-            description: row
-                .try_get("description")
-                .map_err(|e| LambdaError::SqlxError(e))?,
-            code_sha256: row
-                .try_get("code_sha256")
-                .map_err(|e| LambdaError::SqlxError(e))?,
+            version_id: row.try_get("version_id").map_err(LambdaError::SqlxError)?,
+            function_id: row.try_get("function_id").map_err(LambdaError::SqlxError)?,
+            version: row.try_get("version").map_err(LambdaError::SqlxError)?,
+            description: row.try_get("description").map_err(LambdaError::SqlxError)?,
+            code_sha256: row.try_get("code_sha256").map_err(LambdaError::SqlxError)?,
             last_modified: row
                 .try_get("last_modified")
-                .map_err(|e| LambdaError::SqlxError(e))?,
+                .map_err(LambdaError::SqlxError)?,
             code_size: row
                 .try_get::<i64, _>("code_size")
-                .map_err(|e| LambdaError::SqlxError(e))? as u64,
+                .map_err(LambdaError::SqlxError)? as u64,
         })
     }
 
     fn row_to_alias(&self, row: &sqlx::sqlite::SqliteRow) -> Result<Alias, LambdaError> {
         let routing_config: Option<RoutingConfig> = serde_json::from_str(
             row.try_get::<String, _>("routing_config")
-                .map_err(|e| LambdaError::SqlxError(e))?
+                .map_err(LambdaError::SqlxError)?
                 .as_str(),
         )
         .ok();
 
         Ok(Alias {
-            alias_id: row
-                .try_get("alias_id")
-                .map_err(|e| LambdaError::SqlxError(e))?,
-            function_id: row
-                .try_get("function_id")
-                .map_err(|e| LambdaError::SqlxError(e))?,
-            name: row.try_get("name").map_err(|e| LambdaError::SqlxError(e))?,
+            alias_id: row.try_get("alias_id").map_err(LambdaError::SqlxError)?,
+            function_id: row.try_get("function_id").map_err(LambdaError::SqlxError)?,
+            name: row.try_get("name").map_err(LambdaError::SqlxError)?,
             function_version: row
                 .try_get("function_version")
-                .map_err(|e| LambdaError::SqlxError(e))?,
-            description: row
-                .try_get("description")
-                .map_err(|e| LambdaError::SqlxError(e))?,
+                .map_err(LambdaError::SqlxError)?,
+            description: row.try_get("description").map_err(LambdaError::SqlxError)?,
             routing_config,
-            revision_id: row
-                .try_get("revision_id")
-                .map_err(|e| LambdaError::SqlxError(e))?,
+            revision_id: row.try_get("revision_id").map_err(LambdaError::SqlxError)?,
             last_modified: row
                 .try_get("last_modified")
-                .map_err(|e| LambdaError::SqlxError(e))?,
+                .map_err(LambdaError::SqlxError)?,
         })
     }
 }
@@ -1396,7 +1368,7 @@ fn normalize_path(p: &str) -> String {
     let mut s = if p.starts_with('/') {
         p.to_string()
     } else {
-        format!("/{}", p)
+        format!("/{p}")
     };
     if s.len() > 1 && s.ends_with('/') {
         s.pop();
@@ -1429,10 +1401,11 @@ impl ControlPlane {
                 }
             }
         }
-        
+
         // Cache the result
-        self.cache.set_env_vars(function.function_id.to_string(), out.clone());
-        
+        self.cache
+            .set_env_vars(function.function_id.to_string(), out.clone());
+
         Ok(out)
     }
 
@@ -1445,10 +1418,10 @@ impl ControlPlane {
         sqlx::query("INSERT OR REPLACE INTO secrets(name, value, created_at) VALUES(?, ?, ?)")
             .bind(name)
             .bind(encoded)
-            .bind(&now)
+            .bind(now)
             .execute(&self.pool)
             .await
-            .map_err(|e| LambdaError::SqlxError(e))?;
+            .map_err(LambdaError::SqlxError)?;
         // Drain any functions referencing this secret so next invokes pick up the new value
         self.drain_functions_referencing_secret(name).await?;
         Ok(())
@@ -1460,13 +1433,12 @@ impl ControlPlane {
         let rows = sqlx::query("SELECT name, created_at FROM secrets ORDER BY name")
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| LambdaError::SqlxError(e))?;
+            .map_err(LambdaError::SqlxError)?;
         let mut v = Vec::with_capacity(rows.len());
         for r in rows.iter() {
-            let name: String = r.try_get("name").map_err(|e| LambdaError::SqlxError(e))?;
-            let created: chrono::DateTime<chrono::Utc> = r
-                .try_get("created_at")
-                .map_err(|e| LambdaError::SqlxError(e))?;
+            let name: String = r.try_get("name").map_err(LambdaError::SqlxError)?;
+            let created: chrono::DateTime<chrono::Utc> =
+                r.try_get("created_at").map_err(LambdaError::SqlxError)?;
             v.push((name, created));
         }
         Ok(v)
@@ -1477,11 +1449,11 @@ impl ControlPlane {
             .bind(name)
             .execute(&self.pool)
             .await
-            .map_err(|e| LambdaError::SqlxError(e))?;
-        
+            .map_err(LambdaError::SqlxError)?;
+
         // Invalidate cache since secret was deleted
         self.cache.invalidate_secret(name);
-        
+
         // Drain any functions referencing this secret so next invokes fail/reflect missing secret
         self.drain_functions_referencing_secret(name).await?;
         Ok(())
@@ -1498,8 +1470,8 @@ impl ControlPlane {
             .bind(name)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| LambdaError::SqlxError(e))?;
-        
+            .map_err(LambdaError::SqlxError)?;
+
         if let Some(enc) = val {
             if let Ok(bytes) =
                 base64::Engine::decode(&base64::engine::general_purpose::STANDARD, enc)
@@ -1517,16 +1489,14 @@ impl ControlPlane {
 
     async fn drain_functions_referencing_secret(&self, name: &str) -> Result<(), LambdaError> {
         // Find functions whose environment JSON contains this secret reference
-        let pattern = format!("%SECRET_REF:{}%", name);
+        let pattern = format!("%SECRET_REF:{name}%");
         let rows = sqlx::query("SELECT function_id FROM functions WHERE environment LIKE ?")
             .bind(&pattern)
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| LambdaError::SqlxError(e))?;
+            .map_err(LambdaError::SqlxError)?;
         for row in rows {
-            let fid: uuid::Uuid = row
-                .try_get("function_id")
-                .map_err(|e| LambdaError::SqlxError(e))?;
+            let fid: uuid::Uuid = row.try_get("function_id").map_err(LambdaError::SqlxError)?;
             let ids = self.warm_pool.drain_by_function_id(fid).await;
             for id in ids {
                 let _ = self.invoker.remove_container(&id).await;
@@ -1539,10 +1509,13 @@ impl ControlPlane {
     #[instrument(skip(self))]
     pub async fn get_docker_stats(&self) -> Result<DockerStats, LambdaError> {
         // Get Docker stats from invoker
-        let mut docker_stats = self.invoker.get_docker_stats().await
-            .map_err(|e| LambdaError::DockerError {
-                message: format!("Failed to get Docker stats: {}", e),
-            })?;
+        let mut docker_stats =
+            self.invoker
+                .get_docker_stats()
+                .await
+                .map_err(|e| LambdaError::DockerError {
+                    message: format!("Failed to get Docker stats: {e}"),
+                })?;
 
         // Get cache stats
         let cache_stats = self.cache.get_stats();
@@ -1553,33 +1526,69 @@ impl ControlPlane {
             functions: CacheTypeStats {
                 hits: cache_stats.get("functions").map(|s| s.hits).unwrap_or(0),
                 misses: cache_stats.get("functions").map(|s| s.misses).unwrap_or(0),
-                evictions: cache_stats.get("functions").map(|s| s.evictions).unwrap_or(0),
-                invalidations: cache_stats.get("functions").map(|s| s.invalidations).unwrap_or(0),
-                hit_rate: cache_stats.get("functions").map(|s| s.hit_rate()).unwrap_or(0.0),
+                evictions: cache_stats
+                    .get("functions")
+                    .map(|s| s.evictions)
+                    .unwrap_or(0),
+                invalidations: cache_stats
+                    .get("functions")
+                    .map(|s| s.invalidations)
+                    .unwrap_or(0),
+                hit_rate: cache_stats
+                    .get("functions")
+                    .map(|s| s.hit_rate())
+                    .unwrap_or(0.0),
                 size: cache_sizes.get("functions").copied().unwrap_or(0),
             },
             concurrency: CacheTypeStats {
                 hits: cache_stats.get("concurrency").map(|s| s.hits).unwrap_or(0),
-                misses: cache_stats.get("concurrency").map(|s| s.misses).unwrap_or(0),
-                evictions: cache_stats.get("concurrency").map(|s| s.evictions).unwrap_or(0),
-                invalidations: cache_stats.get("concurrency").map(|s| s.invalidations).unwrap_or(0),
-                hit_rate: cache_stats.get("concurrency").map(|s| s.hit_rate()).unwrap_or(0.0),
+                misses: cache_stats
+                    .get("concurrency")
+                    .map(|s| s.misses)
+                    .unwrap_or(0),
+                evictions: cache_stats
+                    .get("concurrency")
+                    .map(|s| s.evictions)
+                    .unwrap_or(0),
+                invalidations: cache_stats
+                    .get("concurrency")
+                    .map(|s| s.invalidations)
+                    .unwrap_or(0),
+                hit_rate: cache_stats
+                    .get("concurrency")
+                    .map(|s| s.hit_rate())
+                    .unwrap_or(0.0),
                 size: cache_sizes.get("concurrency").copied().unwrap_or(0),
             },
             env_vars: CacheTypeStats {
                 hits: cache_stats.get("env_vars").map(|s| s.hits).unwrap_or(0),
                 misses: cache_stats.get("env_vars").map(|s| s.misses).unwrap_or(0),
-                evictions: cache_stats.get("env_vars").map(|s| s.evictions).unwrap_or(0),
-                invalidations: cache_stats.get("env_vars").map(|s| s.invalidations).unwrap_or(0),
-                hit_rate: cache_stats.get("env_vars").map(|s| s.hit_rate()).unwrap_or(0.0),
+                evictions: cache_stats
+                    .get("env_vars")
+                    .map(|s| s.evictions)
+                    .unwrap_or(0),
+                invalidations: cache_stats
+                    .get("env_vars")
+                    .map(|s| s.invalidations)
+                    .unwrap_or(0),
+                hit_rate: cache_stats
+                    .get("env_vars")
+                    .map(|s| s.hit_rate())
+                    .unwrap_or(0.0),
                 size: cache_sizes.get("env_vars").copied().unwrap_or(0),
             },
             secrets: CacheTypeStats {
                 hits: cache_stats.get("secrets").map(|s| s.hits).unwrap_or(0),
                 misses: cache_stats.get("secrets").map(|s| s.misses).unwrap_or(0),
                 evictions: cache_stats.get("secrets").map(|s| s.evictions).unwrap_or(0),
-                invalidations: cache_stats.get("secrets").map(|s| s.invalidations).unwrap_or(0),
-                hit_rate: cache_stats.get("secrets").map(|s| s.hit_rate()).unwrap_or(0.0),
+                invalidations: cache_stats
+                    .get("secrets")
+                    .map(|s| s.invalidations)
+                    .unwrap_or(0),
+                hit_rate: cache_stats
+                    .get("secrets")
+                    .map(|s| s.hit_rate())
+                    .unwrap_or(0.0),
                 size: cache_sizes.get("secrets").copied().unwrap_or(0),
             },
         };
@@ -1592,13 +1601,14 @@ impl ControlPlane {
 
     /// Get Lambda service statistics
     #[instrument(skip(self))]
-    pub async fn get_lambda_service_stats(&self) -> anyhow::Result<lambda_models::LambdaServiceStats> {
+    pub async fn get_lambda_service_stats(
+        &self,
+    ) -> anyhow::Result<lambda_models::LambdaServiceStats> {
         // Get function statistics from database
-        let function_rows = sqlx::query(
-            "SELECT state, memory_size FROM functions ORDER BY last_modified DESC"
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let function_rows =
+            sqlx::query("SELECT state, memory_size FROM functions ORDER BY last_modified DESC")
+                .fetch_all(&self.pool)
+                .await?;
 
         // Get warm pool statistics
         let total_containers = self.warm_pool.total_container_count().await;
@@ -1607,17 +1617,28 @@ impl ControlPlane {
 
         // Calculate totals
         let total_functions = function_rows.len() as u64;
-        let active_functions = function_rows.iter().filter(|row| row.get::<String, _>("state") == "\"Active\"").count() as u64;
-        let stopped_functions = function_rows.iter().filter(|row| row.get::<String, _>("state") == "\"Inactive\"").count() as u64;
-        let failed_functions = function_rows.iter().filter(|row| row.get::<String, _>("state") == "\"Failed\"").count() as u64;
+        let active_functions = function_rows
+            .iter()
+            .filter(|row| row.get::<String, _>("state") == "\"Active\"")
+            .count() as u64;
+        let stopped_functions = function_rows
+            .iter()
+            .filter(|row| row.get::<String, _>("state") == "\"Inactive\"")
+            .count() as u64;
+        let failed_functions = function_rows
+            .iter()
+            .filter(|row| row.get::<String, _>("state") == "\"Failed\"")
+            .count() as u64;
 
         // Calculate total memory and CPU allocation
-        let total_memory_mb: u64 = function_rows.iter()
+        let total_memory_mb: u64 = function_rows
+            .iter()
             .filter(|row| row.get::<String, _>("state") == "\"Active\"")
             .map(|row| row.get::<i64, _>("memory_size") as u64)
             .sum();
 
-        let total_cpu_cores: u64 = function_rows.iter()
+        let total_cpu_cores: u64 = function_rows
+            .iter()
             .filter(|row| row.get::<String, _>("state") == "\"Active\"")
             .map(|row| (row.get::<i64, _>("memory_size") as f64 / 1024.0).ceil() as u64) // Rough estimate: 1 CPU core per 1GB memory
             .sum();
@@ -1632,7 +1653,7 @@ impl ControlPlane {
                 MAX(CAST(duration_ms AS REAL)) as max_duration_ms,
                 MIN(CAST(duration_ms AS REAL)) as min_duration_ms
             FROM executions 
-            WHERE start_time > datetime('now', '-24 hours')"
+            WHERE start_time > datetime('now', '-24 hours')",
         )
         .fetch_one(&self.pool)
         .await?;
@@ -1648,11 +1669,18 @@ impl ControlPlane {
             active_containers: active_containers as u64,
             idle_containers: idle_containers as u64,
             total_invocations_24h: execution_stats.get::<i64, _>("total_invocations") as u64,
-            successful_invocations_24h: execution_stats.get::<i64, _>("successful_invocations") as u64,
+            successful_invocations_24h: execution_stats.get::<i64, _>("successful_invocations")
+                as u64,
             failed_invocations_24h: execution_stats.get::<i64, _>("failed_invocations") as u64,
-            avg_duration_ms: execution_stats.get::<Option<f64>, _>("avg_duration_ms").unwrap_or(0.0),
-            max_duration_ms: execution_stats.get::<Option<f64>, _>("max_duration_ms").unwrap_or(0.0),
-            min_duration_ms: execution_stats.get::<Option<f64>, _>("min_duration_ms").unwrap_or(0.0),
+            avg_duration_ms: execution_stats
+                .get::<Option<f64>, _>("avg_duration_ms")
+                .unwrap_or(0.0),
+            max_duration_ms: execution_stats
+                .get::<Option<f64>, _>("max_duration_ms")
+                .unwrap_or(0.0),
+            min_duration_ms: execution_stats
+                .get::<Option<f64>, _>("min_duration_ms")
+                .unwrap_or(0.0),
         };
 
         Ok(stats)

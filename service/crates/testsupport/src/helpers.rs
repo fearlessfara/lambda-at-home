@@ -35,7 +35,7 @@ fn add_dir_to_zip(
         let new_zip_path = if zip_path.is_empty() {
             name_str.to_string()
         } else {
-            format!("{}/{}", zip_path, name_str)
+            format!("{zip_path}/{name_str}")
         };
 
         if path.is_dir() {

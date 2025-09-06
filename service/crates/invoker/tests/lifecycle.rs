@@ -17,6 +17,7 @@ impl FakeDocker {
     pub fn new() -> Self {
         Self::default()
     }
+    #[allow(dead_code)]
     pub async fn last_created(&self) -> CreateSpec {
         self.created
             .lock()

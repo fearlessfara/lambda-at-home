@@ -1,5 +1,5 @@
 use dashmap::DashMap;
-use lambda_models::{Function, ConcurrencyConfig};
+use lambda_models::{ConcurrencyConfig, Function};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -55,11 +55,11 @@ pub struct FunctionCache {
     concurrency: Arc<DashMap<String, CacheEntry<ConcurrencyConfig>>>,
     env_vars: Arc<DashMap<String, CacheEntry<HashMap<String, String>>>>,
     secrets: Arc<DashMap<String, CacheEntry<String>>>,
-    
+
     // Configuration
     default_ttl: Duration,
     max_size: usize,
-    
+
     // Statistics
     stats: Arc<DashMap<String, CacheStats>>,
 }
@@ -237,7 +237,7 @@ impl FunctionCache {
     /// Clean up expired entries
     pub fn cleanup_expired(&self) -> usize {
         let mut cleaned = 0;
-        
+
         // Clean functions
         self.functions.retain(|_, entry| {
             if entry.is_expired() {
@@ -305,15 +305,18 @@ impl FunctionCache {
 
     // Private helper methods
     fn increment_hit(&self, cache_type: &str) {
-        self.stats.entry(cache_type.to_string()).or_insert_with(CacheStats::default).hits += 1;
+        self.stats.entry(cache_type.to_string()).or_default().hits += 1;
     }
 
     fn increment_miss(&self, cache_type: &str) {
-        self.stats.entry(cache_type.to_string()).or_insert_with(CacheStats::default).misses += 1;
+        self.stats.entry(cache_type.to_string()).or_default().misses += 1;
     }
 
     fn increment_invalidation(&self, cache_type: &str) {
-        self.stats.entry(cache_type.to_string()).or_insert_with(CacheStats::default).invalidations += 1;
+        self.stats
+            .entry(cache_type.to_string())
+            .or_default()
+            .invalidations += 1;
     }
 
     fn evict_if_needed(&self, cache_type: &str) {
@@ -326,7 +329,10 @@ impl FunctionCache {
         };
 
         if current_size >= self.max_size {
-            warn!("Cache size limit reached for {}, evicting oldest entries", cache_type);
+            warn!(
+                "Cache size limit reached for {}, evicting oldest entries",
+                cache_type
+            );
             self.evict_oldest(cache_type);
         }
     }
@@ -334,7 +340,7 @@ impl FunctionCache {
     fn evict_oldest(&self, cache_type: &str) {
         // Simple LRU eviction - remove 10% of entries
         let evict_count = (self.max_size / 10).max(1);
-        
+
         match cache_type {
             "functions" => {
                 let mut entries: Vec<_> = self.functions.iter().collect();
@@ -366,8 +372,11 @@ impl FunctionCache {
             }
             _ => {}
         }
-        
-        self.stats.entry(cache_type.to_string()).or_insert_with(CacheStats::default).evictions += evict_count as u64;
+
+        self.stats
+            .entry(cache_type.to_string())
+            .or_default()
+            .evictions += evict_count as u64;
     }
 }
 
