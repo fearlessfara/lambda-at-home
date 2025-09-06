@@ -169,6 +169,11 @@ jobs:
           cd service
           cargo build --bin lambda-at-home-server
           
+          # Create data directory and database file
+          echo "📁 Creating data directory and database file..."
+          mkdir -p data
+          touch data/lhome.db
+          
           # Start the server in the background
           echo "🚀 Starting server..."
           cargo run --bin lambda-at-home-server &
