@@ -1,9 +1,8 @@
 use crate::queues::FnKey;
+use dashmap::DashMap;
 use lambda_models::LambdaError;
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::Mutex;
 use tracing::{error, info, instrument};
 use uuid::Uuid;
 
@@ -35,20 +34,20 @@ pub enum InstanceState {
 #[derive(Clone)]
 pub struct WarmPool {
     // Key by FnKey for proper isolation (function+runtime+version+env)
-    containers: Arc<Mutex<HashMap<FnKey, Vec<WarmContainer>>>>,
+    // Using DashMap for lock-free concurrent access instead of Mutex<HashMap>
+    containers: Arc<DashMap<FnKey, Vec<WarmContainer>>>,
 }
 
 impl WarmPool {
     pub fn new() -> Self {
         Self {
-            containers: Arc::new(Mutex::new(HashMap::new())),
+            containers: Arc::new(DashMap::new()),
         }
     }
 
     #[instrument(skip(self))]
     pub async fn get_warm_container(&self, key: &FnKey) -> Option<WarmContainer> {
-        let mut containers = self.containers.lock().await;
-        if let Some(container_list) = containers.get_mut(key) {
+        if let Some(mut container_list) = self.containers.get_mut(key) {
             // Find first available container for this function
             for container in container_list.iter_mut() {
                 if container.state == InstanceState::WarmIdle {
@@ -69,8 +68,7 @@ impl WarmPool {
 
     /// Mark one idle container as Active for the given key. Returns its ID.
     pub async fn mark_one_active(&self, key: &FnKey) -> Option<String> {
-        let mut containers = self.containers.lock().await;
-        if let Some(list) = containers.get_mut(key) {
+        if let Some(mut list) = self.containers.get_mut(key) {
             for c in list.iter_mut() {
                 if c.state == InstanceState::WarmIdle {
                     c.state = InstanceState::Active;
@@ -84,8 +82,7 @@ impl WarmPool {
 
     /// Mark one active container as WarmIdle for the given key. Returns its ID.
     pub async fn mark_one_idle(&self, key: &FnKey) -> Option<String> {
-        let mut containers = self.containers.lock().await;
-        if let Some(list) = containers.get_mut(key) {
+        if let Some(mut list) = self.containers.get_mut(key) {
             for c in list.iter_mut() {
                 if c.state == InstanceState::Active {
                     c.state = InstanceState::WarmIdle;
@@ -99,17 +96,19 @@ impl WarmPool {
 
     /// Fallback: mark any one Active container back to WarmIdle across all keys.
     pub async fn mark_any_active_to_idle(&self) -> Option<(FnKey, String)> {
-        let mut containers = self.containers.lock().await;
-        // Iterate keys deterministically would be nice, but HashMap order is fine as fallback
-        let keys: Vec<FnKey> = containers.keys().cloned().collect();
+        // Collect keys first to avoid nested locks
+        let keys: Vec<FnKey> = self
+            .containers
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect();
+
         for key in keys {
-            if let Some(list) = containers.get_mut(&key) {
-                for c in list.iter_mut() {
-                    if c.state == InstanceState::Active {
-                        c.state = InstanceState::WarmIdle;
-                        c.last_used = Instant::now();
-                        return Some((key.clone(), c.container_id.clone()));
-                    }
+            if let Some(mut list) = self.containers.get_mut(&key) {
+                if let Some(c_mut) = list.iter_mut().find(|c| c.state == InstanceState::Active) {
+                    c_mut.state = InstanceState::WarmIdle;
+                    c_mut.last_used = Instant::now();
+                    return Some((key, c_mut.container_id.clone()));
                 }
             }
         }
@@ -120,8 +119,7 @@ impl WarmPool {
     pub async fn add_warm_container(&self, key: FnKey, container: WarmContainer) {
         let container_id = container.container_id.clone();
 
-        let mut containers = self.containers.lock().await;
-        containers
+        self.containers
             .entry(key.clone())
             .or_insert_with(Vec::new)
             .push(container);
@@ -138,8 +136,7 @@ impl WarmPool {
         key: &FnKey,
         container_id: &str,
     ) -> Result<(), LambdaError> {
-        let mut containers = self.containers.lock().await;
-        if let Some(container_list) = containers.get_mut(key) {
+        if let Some(mut container_list) = self.containers.get_mut(key) {
             for container in container_list.iter_mut() {
                 if container.container_id == container_id {
                     container.state = InstanceState::WarmIdle;
@@ -162,13 +159,15 @@ impl WarmPool {
         key: &FnKey,
         container_id: &str,
     ) -> Result<(), LambdaError> {
-        let mut containers = self.containers.lock().await;
-        if let Some(container_list) = containers.get_mut(key) {
+        if let Some(mut container_list) = self.containers.get_mut(key) {
             container_list.retain(|container| container.container_id != container_id);
 
-            // Remove empty entries
-            if container_list.is_empty() {
-                containers.remove(key);
+            // Determine emptiness, then drop guard before removing key
+            let now_empty = container_list.is_empty();
+            drop(container_list);
+
+            if now_empty {
+                self.containers.remove(key);
             }
 
             info!("Removed container from warm pool: {}", container_id);
@@ -192,17 +191,15 @@ impl WarmPool {
         let mut to_stop = Vec::new();
 
         // First pass: identify containers to remove (without holding lock during removal)
-        {
-            let containers = self.containers.lock().await;
-            for (key, container_list) in containers.iter() {
-                for container in container_list.iter() {
-                    let idle_time = now.duration_since(container.last_used);
+        for entry in self.containers.iter() {
+            let key = entry.key().clone();
+            for container in entry.value().iter() {
+                let idle_time = now.duration_since(container.last_used);
 
-                    if idle_time >= hard_idle {
-                        to_remove.push((key.clone(), container.container_id.clone()));
-                    } else if idle_time >= soft_idle && container.state == InstanceState::WarmIdle {
-                        to_stop.push(container.container_id.clone());
-                    }
+                if idle_time >= hard_idle {
+                    to_remove.push((key.clone(), container.container_id.clone()));
+                } else if idle_time >= soft_idle && container.state == InstanceState::WarmIdle {
+                    to_stop.push(container.container_id.clone());
                 }
             }
         }
@@ -227,20 +224,17 @@ impl WarmPool {
 
     /// Get the number of warm containers for a specific function
     pub async fn container_count(&self, key: &FnKey) -> usize {
-        let containers = self.containers.lock().await;
-        containers.get(key).map(|list| list.len()).unwrap_or(0)
+        self.containers.get(key).map(|list| list.len()).unwrap_or(0)
     }
 
     /// Get total number of warm containers across all functions
     pub async fn total_container_count(&self) -> usize {
-        let containers = self.containers.lock().await;
-        containers.values().map(|list| list.len()).sum()
+        self.containers.iter().map(|entry| entry.value().len()).sum()
     }
 
     /// Check if there is at least one idle (WarmIdle) container for the key
     pub async fn has_available(&self, key: &FnKey) -> bool {
-        let containers = self.containers.lock().await;
-        if let Some(list) = containers.get(key) {
+        if let Some(list) = self.containers.get(key) {
             list.iter().any(|c| c.state == InstanceState::WarmIdle)
         } else {
             false
@@ -250,10 +244,9 @@ impl WarmPool {
     /// List containers that are soft idle (idle beyond soft_idle and currently WarmIdle)
     pub async fn list_soft_idle_containers(&self, soft_idle: Duration) -> Vec<String> {
         let now = Instant::now();
-        let containers = self.containers.lock().await;
         let mut to_stop = Vec::new();
-        for (_k, list) in containers.iter() {
-            for c in list.iter() {
+        for entry in self.containers.iter() {
+            for c in entry.value().iter() {
                 let idle_time = now.duration_since(c.last_used);
                 if idle_time >= soft_idle && c.state == InstanceState::WarmIdle {
                     to_stop.push(c.container_id.clone());
@@ -265,8 +258,7 @@ impl WarmPool {
 
     /// Count containers in a specific state for a key
     pub async fn count_state(&self, key: &FnKey, state: InstanceState) -> usize {
-        let containers = self.containers.lock().await;
-        containers
+        self.containers
             .get(key)
             .map(|list| list.iter().filter(|c| c.state == state).count())
             .unwrap_or(0)
@@ -274,8 +266,7 @@ impl WarmPool {
 
     /// List stopped container IDs for a key
     pub async fn list_stopped(&self, key: &FnKey) -> Vec<String> {
-        let containers = self.containers.lock().await;
-        containers
+        self.containers
             .get(key)
             .map(|list| {
                 list.iter()
@@ -292,15 +283,18 @@ impl WarmPool {
         container_id: &str,
         state: InstanceState,
     ) -> bool {
-        let mut containers = self.containers.lock().await;
-        let keys: Vec<FnKey> = containers.keys().cloned().collect();
+        // Collect keys first to avoid nested locking during mutation
+        let keys: Vec<FnKey> = self
+            .containers
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect();
+
         for key in keys {
-            if let Some(list) = containers.get_mut(&key) {
-                for c in list.iter_mut() {
-                    if c.container_id == container_id {
-                        c.state = state;
-                        return true;
-                    }
+            if let Some(mut list) = self.containers.get_mut(&key) {
+                if let Some(c_mut) = list.iter_mut().find(|c| c.container_id == container_id) {
+                    c_mut.state = state;
+                    return true;
                 }
             }
         }
@@ -309,8 +303,7 @@ impl WarmPool {
 
     /// Get one stopped container for a given key if present (does not change state)
     pub async fn get_one_stopped(&self, key: &FnKey) -> Option<String> {
-        let containers = self.containers.lock().await;
-        if let Some(list) = containers.get(key) {
+        if let Some(list) = self.containers.get(key) {
             for c in list.iter() {
                 if c.state == InstanceState::Stopped {
                     return Some(c.container_id.clone());
@@ -322,14 +315,13 @@ impl WarmPool {
 
     /// Drain all containers from the pool and return their container IDs (for shutdown cleanup)
     pub async fn drain_all(&self) -> Vec<String> {
-        let mut containers = self.containers.lock().await;
         let mut ids = Vec::new();
-        for (_k, list) in containers.iter() {
-            for c in list.iter() {
+        for entry in self.containers.iter() {
+            for c in entry.value().iter() {
                 ids.push(c.container_id.clone());
             }
         }
-        containers.clear();
+        self.containers.clear();
         ids
     }
 
@@ -337,23 +329,32 @@ impl WarmPool {
     /// Returns the list of container IDs removed.
     pub async fn drain_by_function_id(&self, function_id: Uuid) -> Vec<String> {
         let mut removed: Vec<String> = Vec::new();
-        let mut containers = self.containers.lock().await;
-        let keys: Vec<FnKey> = containers.keys().cloned().collect();
+
+        // Collect all keys first to avoid modifying while iterating
+        let keys: Vec<FnKey> = self
+            .containers
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect();
+
         for key in keys {
-            if let Some(list) = containers.get_mut(&key) {
-                let mut keep: Vec<WarmContainer> = Vec::with_capacity(list.len());
-                for c in list.drain(..) {
+            let mut now_empty = false;
+            if let Some(mut list) = self.containers.get_mut(&key) {
+                // Use retain to filter out matching containers
+                list.retain(|c| {
                     if c.function_id == function_id {
                         removed.push(c.container_id.clone());
+                        false // Remove this item
                     } else {
-                        keep.push(c);
+                        true // Keep this item
                     }
-                }
-                if keep.is_empty() {
-                    containers.remove(&key);
-                } else {
-                    containers.insert(key, keep);
-                }
+                });
+                now_empty = list.is_empty();
+            }
+
+            if now_empty {
+                // Remove key after dropping the guard
+                self.containers.remove(&key);
             }
         }
         removed
@@ -361,16 +362,19 @@ impl WarmPool {
 
     /// Mark a specific instance by its instance_id as Active
     pub async fn mark_active_by_instance(&self, instance_id: &str) -> Option<(FnKey, String)> {
-        let mut containers = self.containers.lock().await;
-        let keys: Vec<FnKey> = containers.keys().cloned().collect();
+        // Collect keys first to avoid nested locking
+        let keys: Vec<FnKey> = self
+            .containers
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect();
+
         for key in keys {
-            if let Some(list) = containers.get_mut(&key) {
-                for c in list.iter_mut() {
-                    if c.instance_id == instance_id {
-                        c.state = InstanceState::Active;
-                        c.last_used = Instant::now();
-                        return Some((key.clone(), c.container_id.clone()));
-                    }
+            if let Some(mut list) = self.containers.get_mut(&key) {
+                if let Some(c_mut) = list.iter_mut().find(|c| c.instance_id == instance_id) {
+                    c_mut.state = InstanceState::Active;
+                    c_mut.last_used = Instant::now();
+                    return Some((key, c_mut.container_id.clone()));
                 }
             }
         }
@@ -379,16 +383,19 @@ impl WarmPool {
 
     /// Mark a specific instance by its instance_id as WarmIdle
     pub async fn mark_idle_by_instance(&self, instance_id: &str) -> Option<(FnKey, String)> {
-        let mut containers = self.containers.lock().await;
-        let keys: Vec<FnKey> = containers.keys().cloned().collect();
+        // Collect keys first to avoid nested locking
+        let keys: Vec<FnKey> = self
+            .containers
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect();
+
         for key in keys {
-            if let Some(list) = containers.get_mut(&key) {
-                for c in list.iter_mut() {
-                    if c.instance_id == instance_id {
-                        c.state = InstanceState::WarmIdle;
-                        c.last_used = Instant::now();
-                        return Some((key.clone(), c.container_id.clone()));
-                    }
+            if let Some(mut list) = self.containers.get_mut(&key) {
+                if let Some(c_mut) = list.iter_mut().find(|c| c.instance_id == instance_id) {
+                    c_mut.state = InstanceState::WarmIdle;
+                    c_mut.last_used = Instant::now();
+                    return Some((key, c_mut.container_id.clone()));
                 }
             }
         }
@@ -398,16 +405,16 @@ impl WarmPool {
     /// Build a summary for a given function name across all keys (versions/envs).
     pub async fn summary_for_function(&self, function_name: &str) -> WarmPoolSummary {
         let now = Instant::now();
-        let containers = self.containers.lock().await;
         let mut warm_idle = 0usize;
         let mut active = 0usize;
         let mut stopped = 0usize;
         let mut entries = Vec::new();
-        for (key, list) in containers.iter() {
+        for entry in self.containers.iter() {
+            let key = entry.key();
             if key.function_name != function_name {
                 continue;
             }
-            for c in list.iter() {
+            for c in entry.value().iter() {
                 match c.state {
                     InstanceState::WarmIdle => warm_idle += 1,
                     InstanceState::Active => active += 1,

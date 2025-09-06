@@ -221,6 +221,16 @@ describe('Lambda@Home Function Versioning and Management Tests', () => {
         test('should maintain consistent performance across versions', async () => {
             const perfFunction = await global.testManager.createTestFunction('perf-version-test');
             
+            // Warm up the function to avoid cold start affecting performance measurements
+            await measureInvocation(
+                perfFunction.name,
+                global.testManager.generateTestPayload(
+                    'warmup',
+                    'Warmup invocation',
+                    0
+                )
+            );
+            
             // Test performance consistency
             const iterations = 5;
             const results = [];
@@ -242,7 +252,7 @@ describe('Lambda@Home Function Versioning and Management Tests', () => {
                 expect(result.result).toBeValidLambdaResponse();
             }
             
-            // Performance should be consistent
+            // Performance should be consistent (excluding cold start)
             const durations = results.map(r => r.duration);
             const avgDuration = durations.reduce((sum, d) => sum + d, 0) / durations.length;
             expect(avgDuration).toBeWithinPerformanceThreshold(testData.performanceThresholds.fastExecution);

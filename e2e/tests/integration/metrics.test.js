@@ -107,6 +107,16 @@ describe('Lambda@Home Metrics and Performance Tests', () => {
             const requestsPerRound = 5;
             const roundDelay = 1000;
 
+            // Warm up the function to avoid cold start affecting performance measurements
+            const warmupPayloadGenerator = (index) => 
+                global.testManager.generateConcurrentPayload(
+                    index,
+                    'warmup',
+                    'Warmup round',
+                    0
+                );
+            await runConcurrentInvocations(testFunction.name, requestsPerRound, warmupPayloadGenerator);
+
             for (let round = 0; round < sustainedLoadRounds; round++) {
                 const payloadGenerator = (index) => 
                     global.testManager.generateConcurrentPayload(
