@@ -246,10 +246,11 @@ setup_data_directory() {
 bind = "127.0.0.1"
 port_user_api = 9000
 port_runtime_api = 9001
+max_request_body_size_mb = 50
 
 [data]
 dir = "data"
-db_url = "sqlite://data/lhome.db"
+db_url = "sqlite:data/lhome.db"
 
 [docker]
 host = ""
@@ -317,10 +318,11 @@ setup_local_directory() {
 bind = "127.0.0.1"
 port_user_api = 9000
 port_runtime_api = 9001
+max_request_body_size_mb = 50
 
 [data]
 dir = "data"
-db_url = "sqlite://data/lhome.db"
+db_url = "sqlite:data/lhome.db"
 
 [docker]
 host = ""
