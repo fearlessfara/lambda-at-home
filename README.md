@@ -4,6 +4,30 @@ A Docker‑backed AWS Lambda clone that runs locally. Lambda@Home provides Lambd
 
 Repository: https://github.com/fearlessfara/lambda-at-home
 
+## 🚀 Quick Installation
+
+**One-line install for all platforms:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/fearlessfara/lambda-at-home/main/install-lambda-at-home.sh | bash
+```
+
+This will:
+- ✅ Download the latest binary for your platform (Linux x86_64, Linux ARM64, macOS Intel, macOS Apple Silicon)
+- ✅ Create the necessary directory structure
+- ✅ Set up configuration with sensible defaults
+- ✅ Verify the binary with checksums
+
+**Start Lambda@Home:**
+```bash
+cd lambda@home
+./lambda-at-home-server
+```
+
+**Access the web console:** http://localhost:9000
+
+---
+
 ## Features
 
 - Lambda‑compatible User API and in‑container Runtime API
@@ -31,28 +55,16 @@ Lambda@Home consists of several components:
 - **Metrics**: Prometheus metrics and structured logging
 - **Console**: React app (Vite) for managing functions, API Gateway routes, and Secrets
 
-## Quick Start
+## Prerequisites
+
+- Docker installed and running
+- Rust 1.75+ (with rustup) - *only needed for development*
+- Make (optional, for convenience commands) - *only needed for development*
 
 [![CI](https://github.com/fearlessfara/lambda-at-home/actions/workflows/ci.yml/badge.svg)](https://github.com/fearlessfara/lambda-at-home/actions/workflows/ci.yml)
 [![Release](https://github.com/fearlessfara/lambda-at-home/actions/workflows/release.yml/badge.svg)](https://github.com/fearlessfara/lambda-at-home/actions/workflows/release.yml)
 
-### Prerequisites
-
-- Docker installed and running
-- Rust 1.75+ (with rustup)
-- Make (optional, for convenience commands)
-
-### Installation
-
-#### For End Users (Recommended)
-
-Download and install the latest binary:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/fearlessfara/lambda-at-home/main/install-lambda-at-home.sh | bash
-```
-
-#### For Developers
+## For Developers
 
 1) Clone the repository
 ```bash
