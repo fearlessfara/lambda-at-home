@@ -1,26 +1,25 @@
-[workspace]
-members = [
-    "service",
-    "service/crates/api",
-    "service/crates/runtime_api", 
-    "service/crates/control",
-    "service/crates/invoker",
-    "service/crates/packaging",
-    "service/crates/models",
-    "service/crates/metrics",
-    "service/crates/cli",
-    "service/crates/testsupport",
-]
-resolver = "2"
-
-[workspace.package]
+[package]
+name = "lambda-at-home"
 version = "0.1.0"
 edition = "2021"
 authors = ["Lambda@Home Contributors"]
 license = "MIT"
 description = "Lambda@Home - Docker-backed AWS Lambda clone"
 
-[workspace.dependencies]
+[[bin]]
+name = "lambda-at-home-server"
+path = "src/bin/lambda-at-home-server.rs"
+
+[dependencies]
+# All workspace crates
+lambda-api = { path = "crates/api" }
+lambda-runtime-api = { path = "crates/runtime_api" }
+lambda-control = { path = "crates/control" }
+lambda-invoker = { path = "crates/invoker" }
+lambda-packaging = { path = "crates/packaging" }
+lambda-models = { path = "crates/models" }
+lambda-metrics = { path = "crates/metrics" }
+
 # Web framework
 axum = "0.7"
 tokio = { version = "1.0", features = ["full"] }
@@ -90,6 +89,18 @@ tokio-test = "0.4"
 
 # Embedding
 rust-embed = "8.0"
+
+[dev-dependencies]
+lambda-testsupport = { path = "crates/testsupport" }
+futures = "0.3"
+serde_json = "1.0"
+reqwest = { version = "0.11", features = ["json"] }
+zip = "0.6"
+tokio = { version = "1.0", features = ["test-util"] }
+
+[features]
+default = []
+docker_tests = []
 
 [profile.release]
 opt-level = 3

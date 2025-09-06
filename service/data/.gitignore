@@ -1,0 +1,10 @@
+# Lambda@Home data directory
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+cache/*
+zips/*
+*.log
+*.tmp
+*.temp

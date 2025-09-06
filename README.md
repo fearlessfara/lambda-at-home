@@ -243,7 +243,7 @@ lambda@home/
 ├── runtimes/          # Runtime Dockerfiles and bootstrap scripts
 ├── examples/          # Example functions
 ├── configs/           # Configuration files
-├── scripts/           # Curated local test scripts
+├── e2e/              # End-to-end test suite (Jest)
 └── data/              # DB and cache (gitignored)
 ```
 

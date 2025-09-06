@@ -24,20 +24,36 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::info;
 
 #[derive(RustEmbed)]
-#[folder = "../../console/dist"]
+#[folder = "../../../console/dist"]
 struct Assets;
 
 fn embedded_file_response(path: &str) -> impl IntoResponse {
     let key = if path.is_empty() { "index.html" } else { path };
-    let bytes = Assets::get(key).or_else(|| Assets::get("index.html"));
+    
+    // For SPA routes, we need to serve index.html for any route that doesn't correspond
+    // to an actual static file. Check if the requested path has a file extension.
+    let is_static_file = key.contains('.') && !key.ends_with(".html");
+    
+    let bytes = if is_static_file {
+        // For static files (CSS, JS, images, etc.), try to find the actual file
+        Assets::get(key).or_else(|| Assets::get("index.html"))
+    } else {
+        // For SPA routes (no extension or .html), always serve index.html
+        Assets::get("index.html")
+    };
+    
     if let Some(content) = bytes {
         let body: axum::body::Body = axum::body::Body::from(content.data.into_owned());
-        let mime = mime_guess::from_path(key).first_or_octet_stream();
+        let mime = if is_static_file {
+            mime_guess::from_path(key).first_or_octet_stream()
+        } else {
+            mime_guess::from_path("index.html").first_or_octet_stream()
+        };
         let mut headers = HeaderMap::new();
         headers.insert(
             axum::http::header::CONTENT_TYPE,
             HeaderValue::from_str(mime.as_ref())
-                .unwrap_or(HeaderValue::from_static("application/octet-stream")),
+                .unwrap_or(HeaderValue::from_static("text/html")),
         );
         (StatusCode::OK, headers, body).into_response()
     } else {

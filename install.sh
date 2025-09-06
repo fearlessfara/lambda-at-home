@@ -58,7 +58,7 @@ main() {
     # Create data directory structure
     print_status "Creating data directory structure..."
     
-    DATA_DIR="$PROJECT_ROOT/data"
+    DATA_DIR="$PROJECT_ROOT/service/data"
     CACHE_DIR="$DATA_DIR/cache"
     ZIPS_DIR="$DATA_DIR/zips"
     
@@ -103,8 +103,8 @@ main() {
     fi
     
     # Create a default configuration if it doesn't exist
-    CONFIG_DIR="$PROJECT_ROOT/config"
-    DEFAULT_CONFIG="$PROJECT_ROOT/configs/default.toml"
+    CONFIG_DIR="$PROJECT_ROOT/service/configs"
+    DEFAULT_CONFIG="$PROJECT_ROOT/service/configs/default.toml"
     
     if [[ ! -d "$CONFIG_DIR" ]]; then
         mkdir -p "$CONFIG_DIR"
@@ -179,7 +179,7 @@ To backup your Lambda@Home data:
 \`\`\`bash
 # Stop Lambda@Home first
 # Then copy the data directory
-cp -r data/ backup-$(date +%Y%m%d)/
+        cp -r service/data/ backup-$(date +%Y%m%d)/
 \`\`\`
 
 ## Reset
@@ -189,7 +189,7 @@ To reset Lambda@Home to a clean state:
 \`\`\`bash
 # Stop Lambda@Home first
 # Then remove the data directory
-rm -rf data/
+        rm -rf service/data/
 # Run the install script again
 ./install.sh
 \`\`\`

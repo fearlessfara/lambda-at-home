@@ -10,26 +10,69 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::signal;
 use tracing::{info, warn};
+use std::io::Read;
+
+fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
+    // Try to load from service/configs/default.toml first, then configs/default.toml
+    let config_paths = [
+        "service/configs/default.toml",
+        "configs/default.toml",
+    ];
+    
+    for path in &config_paths {
+        if Path::new(path).exists() {
+            let mut file = fs::File::open(path)?;
+            let mut contents = String::new();
+            file.read_to_string(&mut contents)?;
+            let config: Config = toml::from_str(&contents)?;
+            return Ok(config);
+        }
+    }
+    
+    Err("No config file found".into())
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize tracing
     tracing_subscriber::fmt().init();
 
+    // Change to the root directory if we're running from service/
+    if std::env::current_dir()?.ends_with("service") {
+        std::env::set_current_dir("..")?;
+    }
+
     info!("Starting Lambda@Home server");
 
-    // Load configuration (use default for now)
-    let config: Config = Config::default();
+    // Load configuration from file or use defaults
+    let config = load_config().unwrap_or_else(|e| {
+        warn!("Failed to load config file: {}, using defaults", e);
+        Config::default()
+    });
 
     info!("Configuration loaded: {:?}", config);
 
     // Ensure data directory and DB parent directory exist when using SQLite
-    // Default DB URL format: sqlite://data/lhome.db
-    // SQLite auto-creates the file, but the parent directory must exist.
-    if !config.data.dir.is_empty() {
-        let _ = fs::create_dir_all(&config.data.dir);
+    // Handle paths relative to the current working directory
+    let data_dir = if config.data.dir.starts_with("service/") {
+        config.data.dir.clone()
+    } else {
+        format!("service/{}", config.data.dir)
+    };
+    
+    if !data_dir.is_empty() {
+        let _ = fs::create_dir_all(&data_dir);
     }
-    if let Some(db_path) = config.data.db_url.strip_prefix("sqlite://") {
+    
+    let db_url = if config.data.db_url.starts_with("sqlite://service/") {
+        config.data.db_url.clone()
+    } else if config.data.db_url.starts_with("sqlite://") {
+        format!("sqlite://service/{}", &config.data.db_url[9..])
+    } else {
+        config.data.db_url.clone()
+    };
+    
+    if let Some(db_path) = db_url.strip_prefix("sqlite://") {
         if let Some(parent) = Path::new(db_path).parent() {
             if let Err(e) = fs::create_dir_all(parent) {
                 warn!("Failed to create DB parent directory {:?}: {}", parent, e);
@@ -38,7 +81,7 @@ async fn main() -> Result<()> {
     }
 
     // Initialize database pool
-    let pool = SqlitePool::connect(&config.data.db_url).await?;
+    let pool = SqlitePool::connect(&db_url).await?;
     info!("Database connected");
 
     // Initialize metrics service

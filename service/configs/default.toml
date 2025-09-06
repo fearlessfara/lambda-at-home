@@ -4,8 +4,8 @@ port_user_api = 9000
 port_runtime_api = 9001
 
 [data]
-dir = "data"
-db_url = "sqlite://data/lhome.db"
+dir = "service/data"
+db_url = "sqlite://service/data/lhome.db"
 
 [docker]
 host = ""
