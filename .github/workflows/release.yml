@@ -101,12 +101,12 @@ jobs:
             final_name="lambda-at-home-server-${{ github.ref_name }}-${{ matrix.platform }}"
           fi
           
-          # Check if binary exists
-          binary_path="service/target/release/${binary_name}"
+          # Check if binary exists (workspace root target directory)
+          binary_path="target/release/${binary_name}"
           if [[ ! -f "$binary_path" ]]; then
             echo "❌ Binary not found at: $binary_path"
-            echo "📁 Contents of service/target/release/:"
-            ls -la service/target/release/ || echo "Directory does not exist"
+            echo "📁 Contents of target/release/:"
+            ls -la target/release/ || echo "Directory does not exist"
             exit 1
           fi
           
