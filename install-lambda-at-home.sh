@@ -189,205 +189,32 @@ verify_checksum() {
     fi
 }
 
-# Function to install binary
-install_binary() {
-    local install_dir="/usr/local/bin"
-    local binary_name="lambda-at-home-server"
-    local source_binary="lambda-at-home-server"
+# Function to check prerequisites
+check_prerequisites() {
+    print_status "Checking prerequisites..."
     
-    # Check if we have write permissions to /usr/local/bin
-    if [[ ! -w "$install_dir" ]]; then
-        print_status "Installing to ~/.local/bin (no write permission to $install_dir)"
-        install_dir="$HOME/.local/bin"
-        mkdir -p "$install_dir"
+    # Check if we're on Windows
+    if [[ "$(uname -s)" == *"MINGW"* ]] || [[ "$(uname -s)" == *"CYGWIN"* ]] || [[ "$(uname -s)" == *"MSYS"* ]]; then
+        print_warning "Windows detected. This script requires:"
+        print_warning "1. Git Bash, WSL, or MSYS2"
+        print_warning "2. Docker Desktop for Windows"
+        print_warning "3. Make sure Docker Desktop is running"
+        echo
     fi
     
-    # Handle Windows binary
-    if [[ -f "lambda-at-home-server.exe" ]]; then
-        source_binary="lambda-at-home-server.exe"
-        binary_name="lambda-at-home-server.exe"
+    if ! command_exists docker; then
+        print_error "Docker is required but not installed."
+        print_error "Please install Docker from https://docs.docker.com/get-docker/"
+        exit 1
     fi
     
-    print_status "Installing binary to $install_dir..."
-    chmod +x "$source_binary"
-    mv "$source_binary" "$install_dir/$binary_name"
-    
-    print_success "Binary installed to $install_dir/$binary_name"
-    
-    # Add to PATH if needed
-    if [[ "$install_dir" == "$HOME/.local/bin" ]]; then
-        if ! echo "$PATH" | grep -q "$install_dir"; then
-            print_warning "Please add $install_dir to your PATH:"
-            print_warning "  export PATH=\"\$PATH:$install_dir\""
-            print_warning "  Add this line to your ~/.bashrc, ~/.zshrc, or ~/.profile"
-        fi
-    fi
-}
-
-# Function to prompt user for configuration
-prompt_config() {
-    # Check if running in non-interactive mode (piped from curl)
-    if [[ ! -t 0 ]] || [[ -n "$NON_INTERACTIVE" ]]; then
-        print_status "Running in non-interactive mode, using default configuration"
-        set_default_config
-        return
+    if ! docker info >/dev/null 2>&1; then
+        print_error "Docker daemon is not running."
+        print_error "Please start Docker and try again."
+        exit 1
     fi
     
-    print_status "Lambda@Home Configuration Setup"
-    echo
-    
-    # Default values
-    local default_data_dir="data"
-    local default_bind="127.0.0.1"
-    local default_user_api_port="9000"
-    local default_runtime_api_port="9001"
-    local default_memory_mb="512"
-    local default_timeout_ms="3000"
-    local default_tmp_mb="512"
-    local default_soft_idle_ms="45000"
-    local default_hard_idle_ms="300000"
-    local default_max_concurrency="256"
-    
-    # Prompt for data directory
-    echo -n "Data directory (default: $default_data_dir): "
-    read -r data_dir
-    data_dir=${data_dir:-$default_data_dir}
-    
-    # Prompt for bind address
-    echo -n "Server bind address (default: $default_bind): "
-    read -r bind_address
-    bind_address=${bind_address:-$default_bind}
-    
-    # Prompt for ports
-    echo -n "User API port (default: $default_user_api_port): "
-    read -r user_api_port
-    user_api_port=${user_api_port:-$default_user_api_port}
-    
-    echo -n "Runtime API port (default: $default_runtime_api_port): "
-    read -r runtime_api_port
-    runtime_api_port=${runtime_api_port:-$default_runtime_api_port}
-    
-    # Prompt for function defaults
-    echo -n "Default memory (MB) (default: $default_memory_mb): "
-    read -r memory_mb
-    memory_mb=${memory_mb:-$default_memory_mb}
-    
-    echo -n "Default timeout (ms) (default: $default_timeout_ms): "
-    read -r timeout_ms
-    timeout_ms=${timeout_ms:-$default_timeout_ms}
-    
-    echo -n "Default tmp size (MB) (default: $default_tmp_mb): "
-    read -r tmp_mb
-    tmp_mb=${tmp_mb:-$default_tmp_mb}
-    
-    # Prompt for idle settings
-    echo -n "Soft idle timeout (ms) (default: $default_soft_idle_ms): "
-    read -r soft_idle_ms
-    soft_idle_ms=${soft_idle_ms:-$default_soft_idle_ms}
-    
-    echo -n "Hard idle timeout (ms) (default: $default_hard_idle_ms): "
-    read -r hard_idle_ms
-    hard_idle_ms=${hard_idle_ms:-$default_hard_idle_ms}
-    
-    # Prompt for concurrency
-    echo -n "Max global concurrency (default: $default_max_concurrency): "
-    read -r max_concurrency
-    max_concurrency=${max_concurrency:-$default_max_concurrency}
-    
-    # Store values in global variables
-    CONFIG_DATA_DIR="$data_dir"
-    CONFIG_BIND="$bind_address"
-    CONFIG_USER_API_PORT="$user_api_port"
-    CONFIG_RUNTIME_API_PORT="$runtime_api_port"
-    CONFIG_MEMORY_MB="$memory_mb"
-    CONFIG_TIMEOUT_MS="$timeout_ms"
-    CONFIG_TMP_MB="$tmp_mb"
-    CONFIG_SOFT_IDLE_MS="$soft_idle_ms"
-    CONFIG_HARD_IDLE_MS="$hard_idle_ms"
-    CONFIG_MAX_CONCURRENCY="$max_concurrency"
-    
-    echo
-    print_success "Configuration saved!"
-    echo
-}
-
-# Function to set default configuration (non-interactive mode)
-set_default_config() {
-    CONFIG_DATA_DIR="data"
-    CONFIG_BIND="127.0.0.1"
-    CONFIG_USER_API_PORT="9000"
-    CONFIG_RUNTIME_API_PORT="9001"
-    CONFIG_MEMORY_MB="512"
-    CONFIG_TIMEOUT_MS="3000"
-    CONFIG_TMP_MB="512"
-    CONFIG_SOFT_IDLE_MS="45000"
-    CONFIG_HARD_IDLE_MS="300000"
-    CONFIG_MAX_CONCURRENCY="256"
-    
-    print_success "Using default configuration"
-}
-
-# Function to create data directory and config
-setup_data_directory() {
-    local data_dir="$HOME/.lambda-at-home"
-    
-    print_status "Setting up data directory..."
-    
-    mkdir -p "$data_dir/data/cache"
-    mkdir -p "$data_dir/data/zips"
-    mkdir -p "$data_dir/config"
-    mkdir -p "$data_dir/functions"
-    
-    # Create the database file
-    touch "$data_dir/data/lhome.db"
-    print_success "Created database file at $data_dir/data/lhome.db"
-    
-    # Create default config if it doesn't exist
-    if [[ ! -f "$data_dir/config/config.toml" ]]; then
-        cat > "$data_dir/config/config.toml" << EOF
-[server]
-bind = "${CONFIG_BIND:-127.0.0.1}"
-port_user_api = ${CONFIG_USER_API_PORT:-9000}
-port_runtime_api = ${CONFIG_RUNTIME_API_PORT:-9001}
-max_request_body_size_mb = 50
-
-[data]
-dir = "${CONFIG_DATA_DIR:-data}"
-db_url = "sqlite:${CONFIG_DATA_DIR:-data}/lhome.db"
-
-[docker]
-host = ""
-
-[defaults]
-memory_mb = ${CONFIG_MEMORY_MB:-512}
-timeout_ms = ${CONFIG_TIMEOUT_MS:-3000}
-tmp_mb = ${CONFIG_TMP_MB:-512}
-
-[idle]
-soft_ms = ${CONFIG_SOFT_IDLE_MS:-45000}   # stop container
-hard_ms = ${CONFIG_HARD_IDLE_MS:-300000}  # rm container
-
-[limits]
-max_global_concurrency = ${CONFIG_MAX_CONCURRENCY:-256}
-EOF
-        print_success "Created default configuration at $data_dir/config/config.toml"
-    fi
-    
-    # Create .gitignore for data directory
-    cat > "$data_dir/data/.gitignore" << 'EOF'
-# Lambda@Home data directory
-*.db
-*.db-journal
-*.db-wal
-*.db-shm
-cache/*
-zips/*
-*.log
-*.tmp
-*.temp
-EOF
-    
-    print_success "Data directory created at $data_dir"
+    print_success "All prerequisites are met!"
 }
 
 # Function to setup local lambda@home directory
@@ -416,31 +243,31 @@ setup_local_directory() {
     print_success "Created database file at data/lhome.db"
     
     # Create default config
-    cat > "config/config.toml" << EOF
+    cat > "config/config.toml" << 'EOF'
 [server]
-bind = "${CONFIG_BIND:-127.0.0.1}"
-port_user_api = ${CONFIG_USER_API_PORT:-9000}
-port_runtime_api = ${CONFIG_RUNTIME_API_PORT:-9001}
+bind = "127.0.0.1"
+port_user_api = 9000
+port_runtime_api = 9001
 max_request_body_size_mb = 50
 
 [data]
-dir = "${CONFIG_DATA_DIR:-data}"
-db_url = "sqlite:${CONFIG_DATA_DIR:-data}/lhome.db"
+dir = "data"
+db_url = "sqlite:data/lhome.db"
 
 [docker]
 host = ""
 
 [defaults]
-memory_mb = ${CONFIG_MEMORY_MB:-512}
-timeout_ms = ${CONFIG_TIMEOUT_MS:-3000}
-tmp_mb = ${CONFIG_TMP_MB:-512}
+memory_mb = 512
+timeout_ms = 3000
+tmp_mb = 512
 
 [idle]
-soft_ms = ${CONFIG_SOFT_IDLE_MS:-45000}   # stop container
-hard_ms = ${CONFIG_HARD_IDLE_MS:-300000}  # rm container
+soft_ms = 45000   # stop container
+hard_ms = 300000  # rm container
 
 [limits]
-max_global_concurrency = ${CONFIG_MAX_CONCURRENCY:-256}
+max_global_concurrency = 256
 EOF
     print_success "Created default configuration at config/config.toml"
     
@@ -471,62 +298,6 @@ EOF
     echo "  └── functions/"
 }
 
-# Function to check prerequisites
-check_prerequisites() {
-    print_status "Checking prerequisites..."
-    
-    # Check if we're on Windows
-    if [[ "$(uname -s)" == *"MINGW"* ]] || [[ "$(uname -s)" == *"CYGWIN"* ]] || [[ "$(uname -s)" == *"MSYS"* ]]; then
-        print_warning "Windows detected. This script requires:"
-        print_warning "1. Git Bash, WSL, or MSYS2"
-        print_warning "2. Docker Desktop for Windows"
-        print_warning "3. Make sure Docker Desktop is running"
-        echo
-    fi
-    
-    if ! command_exists docker; then
-        print_error "Docker is required but not installed."
-        print_error "Please install Docker from https://docs.docker.com/get-docker/"
-        exit 1
-    fi
-    
-    if ! docker info >/dev/null 2>&1; then
-        print_error "Docker daemon is not running."
-        print_error "Please start Docker and try again."
-        exit 1
-    fi
-    
-    print_success "All prerequisites are met!"
-}
-
-# Function to create systemd service (optional)
-create_systemd_service() {
-    if [[ -d "/etc/systemd/system" ]] && [[ $EUID -eq 0 ]]; then
-        print_status "Creating systemd service file..."
-        cat > "/etc/systemd/system/lambda-at-home.service" << EOF
-[Unit]
-Description=Lambda@Home Server
-After=network.target docker.service
-Requires=docker.service
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=$HOME/.lambda-at-home
-ExecStart=/usr/local/bin/lambda-at-home-server
-Restart=always
-RestartSec=5
-Environment=RUST_LOG=info
-
-[Install]
-WantedBy=multi-user.target
-EOF
-        print_success "Created systemd service file: /etc/systemd/system/lambda-at-home.service"
-        print_status "To enable the service: systemctl enable lambda-at-home"
-        print_status "To start the service: systemctl start lambda-at-home"
-    fi
-}
-
 # Main installation function
 main() {
     print_status "Lambda@Home Installation Script"
@@ -534,9 +305,6 @@ main() {
     
     # Check prerequisites
     check_prerequisites
-    
-    # Interactive configuration
-    prompt_config
     
     # Get latest version
     print_status "Fetching latest version..."
@@ -573,8 +341,6 @@ main() {
     echo "     ./lambda-at-home-server*"
     echo "  2. Or run with custom config:"
     echo "     ./lambda-at-home-server* --config config/config.toml"
-    echo "  3. To customize configuration:"
-    echo "     Edit config/config.toml to change ports, memory, timeouts, etc."
     echo
     print_status "Lambda@Home will be available at:"
     echo "  - User API: http://127.0.0.1:9000"
