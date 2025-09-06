@@ -16,6 +16,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Cache npm (console)
+        uses: actions/cache@v4
+        with:
+          path: console/node_modules
+          key: ${{ runner.os }}-npm-${{ hashFiles('console/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-npm-
+
+      - name: Build Web Console assets (for Rust embed)
+        working-directory: console
+        run: |
+          npm ci
+          npm run build
+
       - name: Install Rust (stable, pin to local)
         uses: dtolnay/rust-toolchain@stable
         with:
