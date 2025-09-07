@@ -62,8 +62,9 @@ function calculatePrimes(n) {
     } else if (n <= 1000) {
         upperBound = Math.ceil(n * Math.log(n) + n * Math.log(Math.log(n)));
     } else {
-        // For large numbers, use a more generous upper bound
-        upperBound = Math.ceil(n * Math.log(n) * 1.2);
+        // For large numbers, use a more reasonable upper bound
+        // The nth prime is approximately n * ln(n), so we need a bit more
+        upperBound = Math.ceil(n * Math.log(n) * 1.1);
     }
     
     const sieve = new Array(upperBound + 1).fill(true);
