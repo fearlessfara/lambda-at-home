@@ -836,8 +836,6 @@ impl ControlPlane {
         &self,
         request: InvokeRequest,
     ) -> Result<InvokeResponse, LambdaError> {
-        info!("Invoking function: {}", request.function_name);
-
         // 1) Lookup function meta from Registry. If not found → 404.
         let function = self.get_function(&request.function_name).await?;
 

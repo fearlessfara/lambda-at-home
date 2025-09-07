@@ -428,7 +428,6 @@ pub async fn invoke_function(
     headers: HeaderMap,
     body: Bytes,
 ) -> InvokeResponse {
-    info!("Invoking function: {}", name);
     // Parse invocation type from headers
     let invocation_type = headers
         .get("X-Amz-Invocation-Type")

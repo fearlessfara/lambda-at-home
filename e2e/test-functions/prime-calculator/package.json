@@ -1,0 +1,12 @@
+{
+  "name": "prime-calculator-test",
+  "version": "1.0.0",
+  "description": "Prime number calculator for Lambda@Home testing",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "keywords": ["lambda", "prime", "calculator", "test"],
+  "author": "Lambda@Home Test Suite",
+  "license": "MIT"
+}

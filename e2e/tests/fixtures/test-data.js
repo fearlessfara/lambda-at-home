@@ -33,6 +33,16 @@ const testData = {
         { type: 'large', payload: 'x'.repeat(1000000), description: 'Large payload' }
     ],
 
+    primeCalculationScenarios: [
+        { count: 1, description: 'First prime number', expectedPrimes: [2] },
+        { count: 5, description: 'First 5 prime numbers', expectedPrimes: [2, 3, 5, 7, 11] },
+        { count: 10, description: 'First 10 prime numbers', expectedPrimes: [2, 3, 5, 7, 11, 13, 17, 19, 23, 29] },
+        { count: 25, description: 'First 25 prime numbers', expectedPrimes: [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97] },
+        { count: 50, description: 'First 50 prime numbers', expectedTime: 100 },
+        { count: 100, description: 'First 100 prime numbers', expectedTime: 200 },
+        { count: 500, description: 'First 500 prime numbers', expectedTime: 1000 }
+    ],
+
     apiGatewayRoutes: [
         { path: '/test-route', method: 'POST', description: 'Basic POST route' },
         { path: '/test-route', method: 'GET', description: 'Basic GET route' },
@@ -59,7 +69,13 @@ const testData = {
         slowExecution: 2000, // ms
         concurrentExecution: 2000, // ms for 5 concurrent
         memoryUsage: 100 * 1024 * 1024, // 100MB
-        cpuUsage: 80 // percentage
+        cpuUsage: 80, // percentage
+        primeCalculation: {
+            small: 50, // ms for first 10 primes
+            medium: 200, // ms for first 100 primes
+            large: 1000, // ms for first 500 primes
+            veryLarge: 5000 // ms for first 1000 primes
+        }
     },
 
     testTimeouts: {

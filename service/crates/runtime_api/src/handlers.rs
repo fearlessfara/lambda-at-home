@@ -7,7 +7,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use tracing::{debug, error, info, instrument};
+use tracing::{error, instrument};
 
 use crate::state::RtState;
 use lambda_control::pending::InvocationResult;
@@ -49,8 +49,6 @@ pub async fn runtime_next(
 ) -> impl IntoResponse {
     let function_name = &q.function_name;
 
-    debug!("Container requesting work for function: {}", function_name);
-
     // Prefer control plane (shared queues). Fallback to local queues in tests.
     if let Some(control) = state.control.clone() {
         // Resolve runtime/version from control to ensure FnKey matches the queued work
@@ -80,7 +78,6 @@ pub async fn runtime_next(
             .await
         {
             Ok(inv) => {
-                info!(req_id = %inv.aws_request_id, "dispatching work item to container");
                 // Mark instance active using container-provided instance ID
                 if let Some(inst_id) = headers_in
                     .get("x-lambdah-instance-id")
@@ -135,7 +132,6 @@ pub async fn runtime_next(
         };
         match state.queues.pop_or_wait(&key).await {
             Ok(work_item) => {
-                info!(req_id = %work_item.request_id, "dispatching work item to container (fallback)");
                 let mut res = Response::new(Body::from(work_item.payload.clone()));
                 *res.status_mut() = StatusCode::OK;
                 let headers = res.headers_mut();
