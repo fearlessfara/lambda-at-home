@@ -83,6 +83,11 @@ class TestClient {
         return response.data;
     }
 
+    async getWarmPool(functionName) {
+        const response = await this.client.get(`/api/admin/warm-pool/${functionName}`);
+        return response.data;
+    }
+
     async createApiRoute(path, method, functionName) {
         const payload = {
             path: path,

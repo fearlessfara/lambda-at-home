@@ -9,6 +9,7 @@ pub struct Config {
     pub defaults: DefaultsConfig,
     pub idle: IdleConfig,
     pub limits: LimitsConfig,
+    pub warmup: WarmupConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -54,6 +55,13 @@ pub struct LimitsConfig {
     pub max_global_concurrency: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct WarmupConfig {
+    pub enabled: bool,
+    pub timeout_ms: u64,
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -81,6 +89,10 @@ impl Default for Config {
             },
             limits: LimitsConfig {
                 max_global_concurrency: 256,
+            },
+            warmup: WarmupConfig {
+                enabled: true,
+                timeout_ms: 30000, // 30 seconds timeout for warm-up
             },
         }
     }
