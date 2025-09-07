@@ -1,6 +1,6 @@
 {
   "name": "prime-calculator-test",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "Prime number calculator for Lambda@Home testing",
   "main": "index.js",
   "scripts": {

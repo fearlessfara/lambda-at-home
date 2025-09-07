@@ -1,6 +1,6 @@
 {
   "name": "lambda-large-deps-test",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "Lambda function with multiple dependencies for testing large uploads",
   "main": "index.js",
   "dependencies": {

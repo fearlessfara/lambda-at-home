@@ -1,6 +1,6 @@
 {
   "name": "lambda-at-home-e2e-tests",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "End-to-end test suite for Lambda@Home using Jest",
   "main": "tests/setup.js",
   "scripts": {
