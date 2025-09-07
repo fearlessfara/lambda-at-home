@@ -975,8 +975,8 @@ impl ControlPlane {
                 reason: format!("Failed to enqueue work item: {e}"),
             })?;
 
-        // 8) Wait for result with buffer: 10 seconds for container startup and execution
-        let total = tokio::time::Duration::from_secs(10);
+        // 8) Wait for result with function's configured timeout
+        let total = tokio::time::Duration::from_secs(function.timeout);
         match tokio::time::timeout(total, rx).await {
             Ok(Ok(result)) => {
                 // Success: build Lambda response
