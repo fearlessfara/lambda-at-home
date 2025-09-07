@@ -107,6 +107,14 @@ impl DockerLike for FakeDocker {
             cache_stats: None,
         })
     }
+    async fn remove_image(&self, _image_ref: &str, _force: bool) -> anyhow::Result<()> {
+        // Mock implementation for testing
+        Ok(())
+    }
+    async fn list_lambda_images(&self) -> anyhow::Result<Vec<String>> {
+        // Mock implementation for testing
+        Ok(vec![])
+    }
 }
 
 #[tokio::test]

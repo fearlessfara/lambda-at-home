@@ -2,6 +2,7 @@ use bollard::container::{
     Config, CreateContainerOptions, LogOutput, LogsOptions, RemoveContainerOptions,
     StartContainerOptions, StopContainerOptions,
 };
+use bollard::image::{RemoveImageOptions, ListImagesOptions};
 use bollard::Docker;
 // Unused imports removed - these types are re-exported by bollard::models
 
@@ -58,6 +59,8 @@ pub trait DockerLike: Send + Sync + 'static {
     async fn remove(&self, container_id: &str, force: bool) -> anyhow::Result<()>;
     async fn inspect_running(&self, container_id: &str) -> anyhow::Result<bool>;
     async fn get_docker_stats(&self) -> anyhow::Result<DockerStats>;
+    async fn remove_image(&self, image_ref: &str, force: bool) -> anyhow::Result<()>;
+    async fn list_lambda_images(&self) -> anyhow::Result<Vec<String>>;
 }
 
 pub struct Invoker {
@@ -429,5 +432,138 @@ impl Invoker {
             version: docker_version,
             cache_stats: None, // Will be filled by the caller
         })
+    }
+
+    #[instrument(skip(self))]
+    pub async fn remove_image(&self, image_ref: &str, force: bool) -> Result<(), LambdaError> {
+        let options = RemoveImageOptions {
+            force,
+            noprune: false,
+        };
+
+        self.docker
+            .remove_image(image_ref, Some(options), None)
+            .await
+            .map_err(|e| LambdaError::DockerError {
+                message: format!("Failed to remove image {}: {}", image_ref, e),
+            })?;
+
+        info!("Removed Docker image: {}", image_ref);
+        Ok(())
+    }
+
+    #[instrument(skip(self))]
+    pub async fn list_lambda_images(&self) -> Result<Vec<String>, LambdaError> {
+        let options = ListImagesOptions::<String> {
+            all: true,
+            ..Default::default()
+        };
+
+        let images = self
+            .docker
+            .list_images(Some(options))
+            .await
+            .map_err(|e| LambdaError::DockerError {
+                message: format!("Failed to list images: {}", e),
+            })?;
+
+        // Filter for Lambda@Home images (those with lambda-home/ prefix)
+        let lambda_images: Vec<String> = images
+            .into_iter()
+            .filter_map(|image| {
+                image.repo_tags
+                    .into_iter()
+                    .find(|tag| tag.starts_with("lambda-home/"))
+                    .map(|tag| tag.to_string())
+            })
+            .collect();
+
+        Ok(lambda_images)
+    }
+}
+
+#[async_trait]
+impl DockerLike for Invoker {
+    async fn create(&self, spec: CreateSpec) -> anyhow::Result<String> {
+        let container_name = spec.name.clone();
+        
+        let config = Config {
+            image: Some(spec.image.clone()),
+            env: Some(spec.env.iter().map(|(k, v)| format!("{}={}", k, v)).collect()),
+            host_config: Some(HostConfig {
+                memory: Some(self.config.defaults.memory_mb as i64 * 1024 * 1024),
+                cpu_quota: Some(100000),
+                cpu_period: Some(100000),
+                readonly_rootfs: Some(spec.read_only_root_fs),
+                cap_drop: Some(spec.cap_drop.clone()),
+                security_opt: if spec.no_new_privileges {
+                    Some(vec!["no-new-privileges:true".to_string()])
+                } else {
+                    None
+                },
+                restart_policy: Some(RestartPolicy {
+                    name: Some(RestartPolicyNameEnum::NO),
+                    maximum_retry_count: None,
+                }),
+                ..Default::default()
+            }),
+            labels: Some(spec.labels.iter().cloned().collect()),
+            ..Default::default()
+        };
+
+        let create_options = CreateContainerOptions {
+            name: container_name.clone(),
+            ..Default::default()
+        };
+
+        let response = self
+            .docker
+            .create_container(Some(create_options), config)
+            .await?;
+
+        Ok(response.id)
+    }
+
+    async fn start(&self, container_id: &str) -> anyhow::Result<()> {
+        self.docker
+            .start_container(container_id, None::<StartContainerOptions<String>>)
+            .await?;
+        Ok(())
+    }
+
+    async fn stop(&self, container_id: &str, timeout_secs: u64) -> anyhow::Result<()> {
+        let options = StopContainerOptions {
+            t: timeout_secs as i64,
+        };
+        self.docker
+            .stop_container(container_id, Some(options))
+            .await?;
+        Ok(())
+    }
+
+    async fn remove(&self, container_id: &str, force: bool) -> anyhow::Result<()> {
+        let options = RemoveContainerOptions {
+            force,
+            ..Default::default()
+        };
+        self.docker.remove_container(container_id, Some(options)).await?;
+        Ok(())
+    }
+
+    async fn inspect_running(&self, container_id: &str) -> anyhow::Result<bool> {
+        let container = self.docker.inspect_container(container_id, None).await?;
+        Ok(container.state.map_or(false, |state| state.running.unwrap_or(false)))
+    }
+
+    async fn get_docker_stats(&self) -> anyhow::Result<DockerStats> {
+        self.get_docker_stats().await.map_err(|e| anyhow::anyhow!(e))
+    }
+
+    async fn remove_image(&self, image_ref: &str, force: bool) -> anyhow::Result<()> {
+        self.remove_image(image_ref, force).await.map_err(|e| anyhow::anyhow!(e))
+    }
+
+    async fn list_lambda_images(&self) -> anyhow::Result<Vec<String>> {
+        self.list_lambda_images().await.map_err(|e| anyhow::anyhow!(e))
     }
 }

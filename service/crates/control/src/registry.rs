@@ -360,7 +360,7 @@ impl ControlPlane {
 
     #[instrument(skip(self))]
     pub async fn delete_function(&self, name: &str) -> Result<(), LambdaError> {
-        // Get function first to get function_id for cache invalidation
+        // Get function first to get function_id for cache invalidation and image cleanup
         let function = self.get_function(name).await.ok();
 
         let result = sqlx::query("DELETE FROM functions WHERE function_name = ?")
@@ -375,6 +375,18 @@ impl ControlPlane {
             });
         }
 
+        // Clean up Docker image if function exists
+        if let Some(func) = &function {
+            let image_ref = format!("lambda-home/{}:{}", func.function_name, func.code_sha256);
+            
+            // Try to remove the Docker image (ignore errors if image doesn't exist)
+            if let Err(e) = self.invoker.remove_image(&image_ref, false).await {
+                info!("Failed to remove Docker image {} (may not exist): {}", image_ref, e);
+            } else {
+                info!("Removed Docker image: {}", image_ref);
+            }
+        }
+
         // Invalidate cache
         self.cache.invalidate_function(name);
         if let Some(func) = function {
@@ -386,6 +398,43 @@ impl ControlPlane {
 
         info!("Deleted function: {}", name);
         Ok(())
+    }
+
+    #[instrument(skip(self))]
+    pub async fn cleanup_orphaned_images(&self) -> Result<usize, LambdaError> {
+        // Get all current function image references
+        let functions = self.list_functions(None, None).await?;
+        let active_image_refs: std::collections::HashSet<String> = functions
+            .functions
+            .into_iter()
+            .map(|func| format!("lambda-home/{}:{}", func.function_name, func.code_sha256))
+            .collect();
+
+        // Get all Lambda@Home Docker images
+        let all_lambda_images = self.invoker.list_lambda_images().await.map_err(|e| {
+            LambdaError::InternalError {
+                reason: format!("Failed to list Docker images: {}", e),
+            }
+        })?;
+
+        // Find orphaned images (images not referenced by any function)
+        let orphaned_images: Vec<String> = all_lambda_images
+            .into_iter()
+            .filter(|image_ref| !active_image_refs.contains(image_ref))
+            .collect();
+
+        let mut removed_count = 0;
+        for image_ref in orphaned_images {
+            if let Err(e) = self.invoker.remove_image(&image_ref, false).await {
+                info!("Failed to remove orphaned image {}: {}", image_ref, e);
+            } else {
+                info!("Removed orphaned Docker image: {}", image_ref);
+                removed_count += 1;
+            }
+        }
+
+        info!("Cleaned up {} orphaned Docker images", removed_count);
+        Ok(removed_count)
     }
 
     #[instrument(skip(self))]
