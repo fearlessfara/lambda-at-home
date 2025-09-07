@@ -30,10 +30,11 @@ class TestManager {
     }
 
     async teardown() {
-        // Clean up functions
+        // Clean up functions using the delete API
         const cleanupPromises = Array.from(this.functions).map(async (functionName) => {
             try {
-                await this.client.deleteFunction(functionName);
+                const result = await this.client.deleteFunction(functionName);
+                console.log(`✅ Deleted function: ${functionName}`);
             } catch (error) {
                 console.error(`❌ Failed to delete function ${functionName}: ${error.message}`);
             }
@@ -42,20 +43,8 @@ class TestManager {
         await Promise.all(cleanupPromises);
         this.functions.clear();
         
-        // Clean up containers
-        try {
-            const containers = DockerUtils.getLambdaContainers();
-            for (const container of containers) {
-                try {
-                    // Force remove container if it exists
-                    require('child_process').execSync(`docker rm -f ${container.name} 2>/dev/null || true`, { stdio: 'ignore' });
-                } catch (error) {
-                    // Ignore errors - container might already be removed
-                }
-            }
-        } catch (error) {
-            // Ignore Docker cleanup errors
-        }
+        // Note: Containers are automatically cleaned up when functions are deleted
+        // No need to manually kill containers - the delete API handles this
         
         // Close HTTP connections
         this.client.close();

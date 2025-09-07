@@ -151,15 +151,17 @@ describe('Prime Calculator Integration Tests', () => {
             expect(result.errorMessage).toContain('Invalid count: -5');
         });
 
-        test('should handle count exceeding maximum', async () => {
+        test('should handle large count computations', async () => {
             const result = await invokePrimeFunction(
                 primeFunction.name,
                 2000
             );
 
-            expect(result.errorMessage).toBeDefined();
-            expect(result.errorType).toBe('Unhandled');
-            expect(result.errorMessage).toContain('Invalid count: 2000');
+            // Should successfully compute 2000 primes (this is a complex computation test)
+            expect(result.count).toBe(2000);
+            expect(result.primes).toHaveLength(2000);
+            expect(result.primes[0]).toBe(2);
+            expect(result.calculationTimeMs).toBeGreaterThanOrEqual(0);
         });
 
         test('should handle missing count parameter', async () => {

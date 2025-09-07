@@ -330,6 +330,18 @@ impl ControlPlane {
             "Created function: {} with code SHA256: {}",
             function.function_name, function.code_sha256
         );
+
+        // Warm up container for faster cold starts (if enabled)
+        if function.state == FunctionState::Active && self.config.warmup.enabled {
+            if let Err(e) = self.warm_up_function(&function).await {
+                // Log warning but don't fail function creation
+                tracing::warn!(
+                    "Failed to warm up container for function {}: {}",
+                    function.function_name, e
+                );
+            }
+        }
+
         Ok(function)
     }
 
@@ -1731,5 +1743,99 @@ impl ControlPlane {
         };
 
         Ok(stats)
+    }
+
+    /// Warm up a function by creating and starting a container for faster cold starts
+    #[instrument(skip(self, function))]
+    pub async fn warm_up_function(&self, function: &Function) -> Result<(), LambdaError> {
+        info!("Warming up function: {}", function.function_name);
+
+        // Apply timeout to the entire warm-up process
+        let warmup_future = async {
+            // Build image reference
+            let image_ref = format!(
+                "lambda-home/{}:{}",
+                function.function_name, function.code_sha256
+            );
+
+            // Build Docker image first
+            let mut packaging_service = lambda_packaging::PackagingService::new(self.config.clone());
+            packaging_service.build_image(function, &image_ref).await?;
+
+            // Create container: generate instance id and inject as env
+            let instance_id = uuid::Uuid::new_v4().to_string();
+            let mut env_vars = self.resolve_env_vars(function).await?;
+            env_vars.insert("LAMBDAH_INSTANCE_ID".to_string(), instance_id.clone());
+            
+            let container_id = self
+                .invoker
+                .create_container(function, &image_ref, env_vars)
+                .await?;
+            self.invoker.start_container(&container_id).await?;
+
+            // Add to warm pool
+            let fn_key = crate::queues::FnKey {
+                function_name: function.function_name.clone(),
+                runtime: function.runtime.clone(),
+                version: "1".to_string(), // Default version for new functions
+                env_hash: self.compute_env_hash(&function.environment).await?,
+            };
+
+            let warm_container = crate::warm_pool::WarmContainer {
+                container_id: container_id.clone(),
+                instance_id: instance_id.clone(),
+                function_id: function.function_id,
+                image_ref: image_ref.clone(),
+                created_at: std::time::Instant::now(),
+                last_used: std::time::Instant::now(),
+                state: crate::warm_pool::InstanceState::WarmIdle, // Ready for work
+            };
+            
+            self.warm_pool
+                .add_warm_container(fn_key, warm_container)
+                .await;
+
+            info!(
+                "Successfully warmed up container: {} for function: {}",
+                container_id, function.function_name
+            );
+            Ok(())
+        };
+
+        // Apply timeout
+        let timeout_duration = std::time::Duration::from_millis(self.config.warmup.timeout_ms);
+        match tokio::time::timeout(timeout_duration, warmup_future).await {
+            Ok(result) => result,
+            Err(_) => {
+                tracing::warn!(
+                    "Warm-up timeout for function {} after {}ms",
+                    function.function_name, self.config.warmup.timeout_ms
+                );
+                Err(LambdaError::InternalError {
+                    reason: "Warm-up timeout".to_string(),
+                })
+            }
+        }
+    }
+
+    /// Compute environment hash for function key
+    async fn compute_env_hash(&self, environment: &std::collections::HashMap<String, String>) -> Result<String, LambdaError> {
+        // Create a deterministic hash of the environment variables
+        let mut env_string = String::new();
+        let mut keys: Vec<_> = environment.keys().collect();
+        keys.sort(); // Ensure deterministic ordering
+        
+        for key in keys {
+            if let Some(value) = environment.get(key) {
+                env_string.push_str(&format!("{}={};", key, value));
+            }
+        }
+        
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        env_string.hash(&mut hasher);
+        Ok(format!("{:x}", hasher.finish()))
     }
 }

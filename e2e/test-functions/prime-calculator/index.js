@@ -62,9 +62,9 @@ function calculatePrimes(n) {
     } else if (n <= 1000) {
         upperBound = Math.ceil(n * Math.log(n) + n * Math.log(Math.log(n)));
     } else {
-        // For large numbers, use a more reasonable upper bound
-        // The nth prime is approximately n * ln(n), so we need a bit more
-        upperBound = Math.ceil(n * Math.log(n) * 1.1);
+        // For large numbers, use a more generous upper bound
+        // The nth prime is approximately n * ln(n), so we need significantly more
+        upperBound = Math.ceil(n * Math.log(n) * 1.5);
     }
     
     const sieve = new Array(upperBound + 1).fill(true);
@@ -86,6 +86,30 @@ function calculatePrimes(n) {
     for (let i = 2; i <= upperBound && primes.length < n; i++) {
         if (sieve[i]) {
             primes.push(i);
+        }
+    }
+    
+    // If we didn't find enough primes, extend the search
+    if (primes.length < n) {
+        // Extend upper bound and continue searching
+        let extendedBound = upperBound * 2;
+        const extendedSieve = new Array(extendedBound + 1).fill(true);
+        extendedSieve[0] = extendedSieve[1] = false;
+        
+        // Re-run sieve with extended bound
+        for (let i = 2; i * i <= extendedBound; i++) {
+            if (extendedSieve[i]) {
+                for (let j = i * i; j <= extendedBound; j += i) {
+                    extendedSieve[j] = false;
+                }
+            }
+        }
+        
+        // Collect more primes
+        for (let i = 2; i <= extendedBound && primes.length < n; i++) {
+            if (extendedSieve[i]) {
+                primes.push(i);
+            }
         }
     }
     
