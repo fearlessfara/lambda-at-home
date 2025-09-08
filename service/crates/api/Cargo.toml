@@ -46,6 +46,10 @@ bytes = { workspace = true }
 # Time
 time = { workspace = true }
 
+# OpenAPI
+utoipa = { version = "4.2", features = ["axum_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "6.0", features = ["axum"] }
+
 [dev-dependencies]
 axum = { version = "0.7", features = ["macros", "json"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }

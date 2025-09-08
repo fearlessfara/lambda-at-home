@@ -2,8 +2,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Function {
     pub function_id: Uuid,
@@ -24,7 +25,7 @@ pub struct Function {
     pub state_reason_code: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub enum FunctionState {
     Pending,
@@ -33,7 +34,7 @@ pub enum FunctionState {
     Failed,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Version {
     pub version_id: Uuid,
@@ -45,7 +46,7 @@ pub struct Version {
     pub code_size: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Alias {
     pub alias_id: Uuid,
@@ -72,7 +73,7 @@ pub struct ConcurrencyConfig {
 
 // Request/Response types for API
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CreateFunctionRequest {
     pub function_name: String,
@@ -87,7 +88,7 @@ pub struct CreateFunctionRequest {
     pub publish: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FunctionCode {
     pub zip_file: Option<String>, // base64 encoded

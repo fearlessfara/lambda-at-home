@@ -17,11 +17,24 @@ use lambda_models::{
 };
 use std::collections::HashMap;
 use tracing::{error, info, instrument};
+use utoipa;
 
 // Type aliases for complex return types
 type InvokeResponse =
     Result<(StatusCode, HeaderMap, Json<serde_json::Value>), (StatusCode, Json<ErrorShape>)>;
 
+#[utoipa::path(
+    post,
+    path = "/2015-03-31/functions",
+    request_body = CreateFunctionRequest,
+    responses(
+        (status = 201, description = "Function created successfully", body = Function),
+        (status = 400, description = "Bad request", body = ErrorShape),
+        (status = 409, description = "Function already exists", body = ErrorShape),
+        (status = 500, description = "Internal server error", body = ErrorShape)
+    ),
+    tag = "functions"
+)]
 #[instrument(skip(state, payload))]
 pub async fn create_function(
     State(state): State<AppState>,
@@ -48,6 +61,19 @@ pub async fn create_function(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/2015-03-31/functions/{name}",
+    params(
+        ("name" = String, Path, description = "Function name")
+    ),
+    responses(
+        (status = 200, description = "Function details", body = Function),
+        (status = 404, description = "Function not found", body = ErrorShape),
+        (status = 500, description = "Internal server error", body = ErrorShape)
+    ),
+    tag = "functions"
+)]
 #[instrument(skip(state))]
 pub async fn get_function(
     State(state): State<AppState>,
@@ -68,6 +94,19 @@ pub async fn get_function(
     }
 }
 
+#[utoipa::path(
+    delete,
+    path = "/2015-03-31/functions/{name}",
+    params(
+        ("name" = String, Path, description = "Function name")
+    ),
+    responses(
+        (status = 204, description = "Function deleted successfully"),
+        (status = 404, description = "Function not found", body = ErrorShape),
+        (status = 500, description = "Internal server error", body = ErrorShape)
+    ),
+    tag = "functions"
+)]
 #[instrument(skip(state))]
 pub async fn delete_function(
     State(state): State<AppState>,
@@ -421,6 +460,22 @@ pub async fn delete_concurrency(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/2015-03-31/functions/{name}/invocations",
+    params(
+        ("name" = String, Path, description = "Function name")
+    ),
+    request_body = String,
+    responses(
+        (status = 200, description = "Function executed successfully", body = serde_json::Value),
+        (status = 400, description = "Bad request", body = ErrorShape),
+        (status = 404, description = "Function not found", body = ErrorShape),
+        (status = 429, description = "Too many requests", body = ErrorShape),
+        (status = 500, description = "Internal server error", body = ErrorShape)
+    ),
+    tag = "invocation"
+)]
 #[instrument(skip(state, headers, body))]
 pub async fn invoke_function(
     State(state): State<AppState>,
@@ -515,11 +570,28 @@ pub async fn invoke_function(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/healthz",
+    responses(
+        (status = 200, description = "Service is healthy", body = String)
+    ),
+    tag = "health"
+)]
 #[instrument(skip(_state))]
 pub async fn health_check(State(_state): State<AppState>) -> Result<&'static str, StatusCode> {
     Ok("OK")
 }
 
+#[utoipa::path(
+    get,
+    path = "/metrics",
+    responses(
+        (status = 200, description = "Prometheus metrics", body = String),
+        (status = 500, description = "Internal server error")
+    ),
+    tag = "health"
+)]
 #[instrument(skip(state))]
 pub async fn metrics(State(state): State<AppState>) -> Result<String, StatusCode> {
     match state.metrics.get_prometheus_metrics().await {

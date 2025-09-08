@@ -13,3 +13,4 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 thiserror = { workspace = true }
 sqlx = { workspace = true }
+utoipa = { version = "4.2", features = ["chrono", "uuid"] }

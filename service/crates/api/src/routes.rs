@@ -1,4 +1,4 @@
-use crate::{handlers::warm_pool_summary, handlers::*, AppState};
+use crate::{handlers::warm_pool_summary, handlers::*, openapi::{create_swagger_ui, openapi_json}, AppState};
 use axum::{
     routing::{delete, get, post, put},
     Router,
@@ -73,6 +73,9 @@ pub fn create_router() -> Router<AppState> {
         .route("/admin/secrets", get(list_secrets))
         .route("/admin/secrets", post(create_secret))
         .route("/admin/secrets/:name", delete(delete_secret))
+        // OpenAPI documentation
+        .route("/openapi.json", get(openapi_json))
+        .merge(create_swagger_ui())
         .fallback(|state, req| async move { api_gateway_proxy(state, req).await })
 }
 
