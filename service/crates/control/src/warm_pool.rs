@@ -411,6 +411,49 @@ impl WarmPool {
         None
     }
 
+    /// Remove container by container_id across all keys
+    pub async fn remove_container_by_id(&self, container_id: &str) -> Result<(), LambdaError> {
+        // Collect keys first to avoid nested locking during mutation
+        let keys: Vec<FnKey> = self
+            .containers
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect();
+
+        for key in keys {
+            if let Some(mut list) = self.containers.get_mut(&key) {
+                let original_len = list.len();
+                list.retain(|c| c.container_id != container_id);
+
+                if list.len() < original_len {
+                    // Container was found and removed
+                    let now_empty = list.is_empty();
+                    drop(list); // Release the lock
+
+                    if now_empty {
+                        self.containers.remove(&key);
+                    }
+
+                    info!("Removed container from warm pool: {}", container_id);
+                    return Ok(());
+                }
+            }
+        }
+
+        error!("Container not found in warm pool: {}", container_id);
+        Err(LambdaError::InvalidRequest {
+            reason: "Container not found".to_string(),
+        })
+    }
+
+    /// List all containers across all keys (for monitoring purposes)
+    pub async fn list_all_containers(&self) -> Vec<(FnKey, Vec<WarmContainer>)> {
+        self.containers
+            .iter()
+            .map(|entry| (entry.key().clone(), entry.value().clone()))
+            .collect()
+    }
+
     /// Build a summary for a given function name across all keys (versions/envs).
     pub async fn summary_for_function(&self, function_name: &str) -> WarmPoolSummary {
         let now = Instant::now();

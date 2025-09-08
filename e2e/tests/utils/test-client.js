@@ -28,7 +28,7 @@ class TestClient {
         }
     }
 
-    async createFunction(functionName, runtime = 'nodejs22.x', handler = 'index.handler', zipData) {
+    async createFunction(functionName, runtime = 'nodejs22.x', handler = 'index.handler', zipData, options = {}) {
         const payload = {
             function_name: functionName,
             runtime: runtime,
@@ -37,8 +37,8 @@ class TestClient {
                 zip_file: zipData
             },
             description: `Test function for ${functionName}`,
-            timeout: 30,
-            memory_size: 512
+            timeout: options.timeout || 30,
+            memory_size: options.memory_size || 512
         };
 
         const response = await this.client.post('/api/2015-03-31/functions', payload);

@@ -1,0 +1,269 @@
+{
+  "timestamp": "2025-09-07T21:42:33.837Z",
+  "results": [
+    {
+      "type": "prime",
+      "functionName": "perf-256mb-1757280998942",
+      "memoryMB": 256,
+      "primeCount": 100,
+      "coldDuration": 1691,
+      "avgWarmDuration": 13,
+      "minWarmDuration": 5,
+      "maxWarmDuration": 27,
+      "warmDurations": [
+        24,
+        6,
+        7,
+        27,
+        12,
+        12,
+        14,
+        12,
+        8,
+        5
+      ]
+    },
+    {
+      "type": "prime",
+      "functionName": "perf-256mb-1757280998942",
+      "memoryMB": 256,
+      "primeCount": 1000,
+      "coldDuration": 988,
+      "avgWarmDuration": 11,
+      "minWarmDuration": 6,
+      "maxWarmDuration": 26,
+      "warmDurations": [
+        14,
+        12,
+        26,
+        7,
+        10,
+        9,
+        11,
+        6,
+        10,
+        9
+      ]
+    },
+    {
+      "type": "prime",
+      "functionName": "perf-256mb-1757280998942",
+      "memoryMB": 256,
+      "primeCount": 10000,
+      "coldDuration": 1077,
+      "avgWarmDuration": 45,
+      "minWarmDuration": 33,
+      "maxWarmDuration": 73,
+      "warmDurations": [
+        38,
+        42,
+        73,
+        50,
+        53,
+        36,
+        59,
+        35,
+        33,
+        35
+      ]
+    },
+    {
+      "type": "prime",
+      "functionName": "perf-256mb-1757280998942",
+      "memoryMB": 256,
+      "primeCount": 100000,
+      "coldDuration": 1680,
+      "avgWarmDuration": 507,
+      "minWarmDuration": 458,
+      "maxWarmDuration": 547,
+      "warmDurations": [
+        547,
+        466,
+        544,
+        529,
+        458,
+        501,
+        478,
+        517,
+        504,
+        528
+      ]
+    },
+    {
+      "type": "prime",
+      "functionName": "perf-512mb-1757281118288",
+      "memoryMB": 512,
+      "primeCount": 100,
+      "coldDuration": 936,
+      "avgWarmDuration": 10,
+      "minWarmDuration": 5,
+      "maxWarmDuration": 19,
+      "warmDurations": [
+        19,
+        16,
+        10,
+        8,
+        5,
+        8,
+        8,
+        11,
+        5,
+        7
+      ]
+    },
+    {
+      "type": "prime",
+      "functionName": "perf-512mb-1757281118288",
+      "memoryMB": 512,
+      "primeCount": 1000,
+      "coldDuration": 1223,
+      "avgWarmDuration": 8,
+      "minWarmDuration": 6,
+      "maxWarmDuration": 12,
+      "warmDurations": [
+        7,
+        10,
+        6,
+        6,
+        11,
+        8,
+        12,
+        7,
+        6,
+        6
+      ]
+    },
+    {
+      "type": "prime",
+      "functionName": "perf-512mb-1757281118288",
+      "memoryMB": 512,
+      "primeCount": 10000,
+      "coldDuration": 1051,
+      "avgWarmDuration": 47,
+      "minWarmDuration": 34,
+      "maxWarmDuration": 104,
+      "warmDurations": [
+        42,
+        36,
+        34,
+        104,
+        45,
+        45,
+        42,
+        40,
+        38,
+        43
+      ]
+    },
+    {
+      "type": "prime",
+      "functionName": "perf-512mb-1757281118288",
+      "memoryMB": 512,
+      "primeCount": 100000,
+      "coldDuration": 1832,
+      "avgWarmDuration": 538,
+      "minWarmDuration": 490,
+      "maxWarmDuration": 603,
+      "warmDurations": [
+        490,
+        603,
+        599,
+        495,
+        492,
+        572,
+        497,
+        563,
+        494,
+        579
+      ]
+    },
+    {
+      "type": "prime",
+      "functionName": "perf-1024mb-1757281236212",
+      "memoryMB": 1024,
+      "primeCount": 100,
+      "coldDuration": 1232,
+      "avgWarmDuration": 7,
+      "minWarmDuration": 5,
+      "maxWarmDuration": 10,
+      "warmDurations": [
+        6,
+        9,
+        6,
+        5,
+        5,
+        6,
+        8,
+        9,
+        10,
+        7
+      ]
+    },
+    {
+      "type": "prime",
+      "functionName": "perf-1024mb-1757281236212",
+      "memoryMB": 1024,
+      "primeCount": 1000,
+      "coldDuration": 981,
+      "avgWarmDuration": 11,
+      "minWarmDuration": 5,
+      "maxWarmDuration": 29,
+      "warmDurations": [
+        8,
+        22,
+        5,
+        6,
+        9,
+        12,
+        8,
+        29,
+        6,
+        5
+      ]
+    },
+    {
+      "type": "prime",
+      "functionName": "perf-1024mb-1757281236212",
+      "memoryMB": 1024,
+      "primeCount": 10000,
+      "coldDuration": 867,
+      "avgWarmDuration": 37,
+      "minWarmDuration": 29,
+      "maxWarmDuration": 85,
+      "warmDurations": [
+        31,
+        30,
+        85,
+        32,
+        29,
+        38,
+        30,
+        29,
+        29,
+        35
+      ]
+    },
+    {
+      "type": "prime",
+      "functionName": "perf-1024mb-1757281236212",
+      "memoryMB": 1024,
+      "primeCount": 100000,
+      "coldDuration": 1446,
+      "avgWarmDuration": 541,
+      "minWarmDuration": 490,
+      "maxWarmDuration": 642,
+      "warmDurations": [
+        545,
+        578,
+        530,
+        525,
+        518,
+        490,
+        642,
+        534,
+        507,
+        545
+      ]
+    }
+  ]
+}

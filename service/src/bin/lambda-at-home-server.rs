@@ -15,9 +15,9 @@ use tracing::{info, warn};
 fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
     // Try to load from various config locations
     let config_paths = [
-        "service/configs/default.toml", 
+        "service/configs/default.toml",
         "configs/default.toml",
-        "config/config.toml"
+        "config/config.toml",
     ];
 
     for path in &config_paths {
@@ -76,10 +76,8 @@ async fn main() -> Result<()> {
     // Handle both sqlite:// and sqlite: formats
     let db_path = if let Some(path) = db_url.strip_prefix("sqlite://") {
         Some(path)
-    } else if let Some(path) = db_url.strip_prefix("sqlite:") {
-        Some(path)
     } else {
-        None
+        db_url.strip_prefix("sqlite:")
     };
 
     if let Some(db_path) = db_path {

@@ -2,7 +2,8 @@ use bollard::container::{
     Config, CreateContainerOptions, LogOutput, LogsOptions, RemoveContainerOptions,
     StartContainerOptions, StopContainerOptions,
 };
-use bollard::image::{RemoveImageOptions, ListImagesOptions};
+use bollard::image::{ListImagesOptions, RemoveImageOptions};
+use bollard::models::EventMessage;
 use bollard::Docker;
 // Unused imports removed - these types are re-exported by bollard::models
 
@@ -14,7 +15,33 @@ use lambda_models::{
     DockerVersion as LambdaDockerVersion, Function, LambdaError,
 };
 use std::collections::HashMap;
-use tracing::{error, info, instrument};
+use tokio::sync::mpsc;
+use tracing::{error, info, instrument, warn};
+
+#[derive(Clone, Debug)]
+pub enum ContainerEvent {
+    Die {
+        container_id: String,
+        exit_code: Option<i64>,
+    },
+    Stop {
+        container_id: String,
+    },
+    Kill {
+        container_id: String,
+    },
+    Remove {
+        container_id: String,
+    },
+    Start {
+        container_id: String,
+    },
+    Create {
+        container_id: String,
+    },
+}
+
+pub type ContainerEventSender = mpsc::UnboundedSender<ContainerEvent>;
 
 #[derive(Clone, Debug)]
 pub struct CreateSpec {
@@ -66,6 +93,7 @@ pub trait DockerLike: Send + Sync + 'static {
 pub struct Invoker {
     docker: Docker,
     config: AppConfig,
+    event_sender: Option<ContainerEventSender>,
 }
 
 impl Invoker {
@@ -75,7 +103,103 @@ impl Invoker {
                 message: e.to_string(),
             })?;
 
-        Ok(Self { docker, config })
+        Ok(Self {
+            docker,
+            config,
+            event_sender: None,
+        })
+    }
+
+    pub fn with_event_sender(mut self, sender: ContainerEventSender) -> Self {
+        self.event_sender = Some(sender);
+        self
+    }
+
+    #[instrument(skip(self))]
+    pub async fn start_events_monitor(&self) -> Result<(), LambdaError> {
+        let docker = self.docker.clone();
+        let event_sender = self.event_sender.clone();
+
+        tokio::spawn(async move {
+            if let Err(e) = Self::monitor_docker_events(docker, event_sender).await {
+                error!("Docker events monitor failed: {}", e);
+            }
+        });
+
+        info!("Started Docker events monitor");
+        Ok(())
+    }
+
+    #[instrument(skip(self, event_sender))]
+    pub async fn start_events_monitor_with_sender(
+        &self,
+        event_sender: ContainerEventSender,
+    ) -> Result<(), LambdaError> {
+        let docker = self.docker.clone();
+
+        tokio::spawn(async move {
+            if let Err(e) = Self::monitor_docker_events(docker, Some(event_sender)).await {
+                error!("Docker events monitor failed: {}", e);
+            }
+        });
+
+        info!("Started Docker events monitor with sender");
+        Ok(())
+    }
+
+    async fn monitor_docker_events(
+        docker: Docker,
+        event_sender: Option<ContainerEventSender>,
+    ) -> Result<(), LambdaError> {
+        let mut events_stream = docker.events::<String>(None);
+
+        info!("Docker events monitor started");
+
+        while let Some(event_result) = events_stream.next().await {
+            match event_result {
+                Ok(event) => {
+                    if let Some(sender) = &event_sender {
+                        if let Some(container_event) = Self::parse_docker_event(event) {
+                            if let Err(e) = sender.send(container_event) {
+                                warn!("Failed to send container event: {}", e);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Error receiving Docker event: {}", e);
+                    // Continue monitoring even if we get errors
+                }
+            }
+        }
+
+        warn!("Docker events stream ended");
+        Ok(())
+    }
+
+    fn parse_docker_event(event: EventMessage) -> Option<ContainerEvent> {
+        let actor = event.actor?;
+        let container_id = actor.id?;
+
+        match event.action.as_deref() {
+            Some("die") => {
+                let exit_code = actor
+                    .attributes
+                    .and_then(|attrs| attrs.get("exitCode").cloned())
+                    .and_then(|code| code.parse::<i64>().ok());
+
+                Some(ContainerEvent::Die {
+                    container_id,
+                    exit_code,
+                })
+            }
+            Some("stop") => Some(ContainerEvent::Stop { container_id }),
+            Some("kill") => Some(ContainerEvent::Kill { container_id }),
+            Some("remove") => Some(ContainerEvent::Remove { container_id }),
+            Some("start") => Some(ContainerEvent::Start { container_id }),
+            Some("create") => Some(ContainerEvent::Create { container_id }),
+            _ => None, // Ignore other events
+        }
     }
 
     #[instrument(skip(self))]
@@ -445,7 +569,7 @@ impl Invoker {
             .remove_image(image_ref, Some(options), None)
             .await
             .map_err(|e| LambdaError::DockerError {
-                message: format!("Failed to remove image {}: {}", image_ref, e),
+                message: format!("Failed to remove image {image_ref}: {e}"),
             })?;
 
         info!("Removed Docker image: {}", image_ref);
@@ -459,19 +583,20 @@ impl Invoker {
             ..Default::default()
         };
 
-        let images = self
-            .docker
-            .list_images(Some(options))
-            .await
-            .map_err(|e| LambdaError::DockerError {
-                message: format!("Failed to list images: {}", e),
-            })?;
+        let images =
+            self.docker
+                .list_images(Some(options))
+                .await
+                .map_err(|e| LambdaError::DockerError {
+                    message: format!("Failed to list images: {e}"),
+                })?;
 
         // Filter for Lambda@Home images (those with lambda-home/ prefix)
         let lambda_images: Vec<String> = images
             .into_iter()
             .filter_map(|image| {
-                image.repo_tags
+                image
+                    .repo_tags
                     .into_iter()
                     .find(|tag| tag.starts_with("lambda-home/"))
                     .map(|tag| tag.to_string())
@@ -486,10 +611,10 @@ impl Invoker {
 impl DockerLike for Invoker {
     async fn create(&self, spec: CreateSpec) -> anyhow::Result<String> {
         let container_name = spec.name.clone();
-        
+
         let config = Config {
             image: Some(spec.image.clone()),
-            env: Some(spec.env.iter().map(|(k, v)| format!("{}={}", k, v)).collect()),
+            env: Some(spec.env.iter().map(|(k, v)| format!("{k}={v}")).collect()),
             host_config: Some(HostConfig {
                 memory: Some(self.config.defaults.memory_mb as i64 * 1024 * 1024),
                 cpu_quota: Some(100000),
@@ -546,24 +671,34 @@ impl DockerLike for Invoker {
             force,
             ..Default::default()
         };
-        self.docker.remove_container(container_id, Some(options)).await?;
+        self.docker
+            .remove_container(container_id, Some(options))
+            .await?;
         Ok(())
     }
 
     async fn inspect_running(&self, container_id: &str) -> anyhow::Result<bool> {
         let container = self.docker.inspect_container(container_id, None).await?;
-        Ok(container.state.map_or(false, |state| state.running.unwrap_or(false)))
+        Ok(container
+            .state
+            .is_some_and(|state| state.running.unwrap_or(false)))
     }
 
     async fn get_docker_stats(&self) -> anyhow::Result<DockerStats> {
-        self.get_docker_stats().await.map_err(|e| anyhow::anyhow!(e))
+        self.get_docker_stats()
+            .await
+            .map_err(|e| anyhow::anyhow!(e))
     }
 
     async fn remove_image(&self, image_ref: &str, force: bool) -> anyhow::Result<()> {
-        self.remove_image(image_ref, force).await.map_err(|e| anyhow::anyhow!(e))
+        self.remove_image(image_ref, force)
+            .await
+            .map_err(|e| anyhow::anyhow!(e))
     }
 
     async fn list_lambda_images(&self) -> anyhow::Result<Vec<String>> {
-        self.list_lambda_images().await.map_err(|e| anyhow::anyhow!(e))
+        self.list_lambda_images()
+            .await
+            .map_err(|e| anyhow::anyhow!(e))
     }
 }

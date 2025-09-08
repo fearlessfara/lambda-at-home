@@ -1,6 +1,7 @@
 use crate::autoscaler::Autoscaler;
 use crate::cache::FunctionCache;
 use crate::concurrency::ConcurrencyManager;
+use crate::container_monitor::ContainerMonitor;
 use crate::execution_tracker::ExecutionTracker;
 use crate::migrations;
 use crate::pending::Pending;
@@ -92,6 +93,19 @@ impl ControlPlane {
                     debug!("Cache cleanup: removed {} expired entries", cleaned);
                 }
             }
+        });
+
+        // Start container monitor for bidirectional state sync
+        let (container_monitor, event_sender) = ContainerMonitor::new(warm_pool.clone());
+
+        // Start Docker events monitoring
+        if let Err(e) = invoker.start_events_monitor_with_sender(event_sender).await {
+            error!("Failed to start Docker events monitor: {}", e);
+        }
+
+        // Start container monitor task
+        tokio::spawn(async move {
+            container_monitor.start().await;
         });
 
         Ok(Self {
@@ -337,7 +351,8 @@ impl ControlPlane {
                 // Log warning but don't fail function creation
                 tracing::warn!(
                     "Failed to warm up container for function {}: {}",
-                    function.function_name, e
+                    function.function_name,
+                    e
                 );
             }
         }
@@ -387,13 +402,33 @@ impl ControlPlane {
             });
         }
 
-        // Clean up Docker image if function exists
+        // Clean up containers and Docker image if function exists
         if let Some(func) = &function {
+            // First, stop and remove all containers for this function
+            let container_ids = self.warm_pool.drain_by_function_id(func.function_id).await;
+            for container_id in container_ids {
+                // Try to stop the container first (best effort)
+                if let Err(e) = self.invoker.stop_container(&container_id).await {
+                    debug!("Failed to stop container {} (may already be stopped): {}", container_id, e);
+                }
+                
+                // Remove the container
+                if let Err(e) = self.invoker.remove_container(&container_id).await {
+                    debug!("Failed to remove container {} (may already be removed): {}", container_id, e);
+                } else {
+                    info!("Removed container: {}", container_id);
+                }
+            }
+
+            // Then remove the Docker image
             let image_ref = format!("lambda-home/{}:{}", func.function_name, func.code_sha256);
-            
+
             // Try to remove the Docker image (ignore errors if image doesn't exist)
             if let Err(e) = self.invoker.remove_image(&image_ref, false).await {
-                info!("Failed to remove Docker image {} (may not exist): {}", image_ref, e);
+                info!(
+                    "Failed to remove Docker image {} (may not exist): {}",
+                    image_ref, e
+                );
             } else {
                 info!("Removed Docker image: {}", image_ref);
             }
@@ -423,11 +458,13 @@ impl ControlPlane {
             .collect();
 
         // Get all Lambda@Home Docker images
-        let all_lambda_images = self.invoker.list_lambda_images().await.map_err(|e| {
-            LambdaError::InternalError {
-                reason: format!("Failed to list Docker images: {}", e),
-            }
-        })?;
+        let all_lambda_images =
+            self.invoker
+                .list_lambda_images()
+                .await
+                .map_err(|e| LambdaError::InternalError {
+                    reason: format!("Failed to list Docker images: {e}"),
+                })?;
 
         // Find orphaned images (images not referenced by any function)
         let orphaned_images: Vec<String> = all_lambda_images
@@ -1759,14 +1796,15 @@ impl ControlPlane {
             );
 
             // Build Docker image first
-            let mut packaging_service = lambda_packaging::PackagingService::new(self.config.clone());
+            let mut packaging_service =
+                lambda_packaging::PackagingService::new(self.config.clone());
             packaging_service.build_image(function, &image_ref).await?;
 
             // Create container: generate instance id and inject as env
             let instance_id = uuid::Uuid::new_v4().to_string();
             let mut env_vars = self.resolve_env_vars(function).await?;
             env_vars.insert("LAMBDAH_INSTANCE_ID".to_string(), instance_id.clone());
-            
+
             let container_id = self
                 .invoker
                 .create_container(function, &image_ref, env_vars)
@@ -1790,7 +1828,7 @@ impl ControlPlane {
                 last_used: std::time::Instant::now(),
                 state: crate::warm_pool::InstanceState::WarmIdle, // Ready for work
             };
-            
+
             self.warm_pool
                 .add_warm_container(fn_key, warm_container)
                 .await;
@@ -1809,7 +1847,8 @@ impl ControlPlane {
             Err(_) => {
                 tracing::warn!(
                     "Warm-up timeout for function {} after {}ms",
-                    function.function_name, self.config.warmup.timeout_ms
+                    function.function_name,
+                    self.config.warmup.timeout_ms
                 );
                 Err(LambdaError::InternalError {
                     reason: "Warm-up timeout".to_string(),
@@ -1819,21 +1858,24 @@ impl ControlPlane {
     }
 
     /// Compute environment hash for function key
-    async fn compute_env_hash(&self, environment: &std::collections::HashMap<String, String>) -> Result<String, LambdaError> {
+    async fn compute_env_hash(
+        &self,
+        environment: &std::collections::HashMap<String, String>,
+    ) -> Result<String, LambdaError> {
         // Create a deterministic hash of the environment variables
         let mut env_string = String::new();
         let mut keys: Vec<_> = environment.keys().collect();
         keys.sort(); // Ensure deterministic ordering
-        
+
         for key in keys {
             if let Some(value) = environment.get(key) {
-                env_string.push_str(&format!("{}={};", key, value));
+                env_string.push_str(&format!("{key}={value};"));
             }
         }
-        
+
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         env_string.hash(&mut hasher);
         Ok(format!("{:x}", hasher.finish()))

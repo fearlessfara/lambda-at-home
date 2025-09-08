@@ -77,3 +77,6 @@ coverage.xml
 
 # Test coverage
 .nyc_output/
+
+# Performance test results
+performance-results.md
