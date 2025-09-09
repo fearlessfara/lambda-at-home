@@ -495,6 +495,13 @@ impl ControlPlane {
         let limit = max_items.unwrap_or(50).min(1000) as i64;
         let offset = marker.and_then(|m| m.parse::<i64>().ok()).unwrap_or(0);
 
+        // Get total count
+        let total_count_row = sqlx::query("SELECT COUNT(*) as count FROM functions")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(LambdaError::SqlxError)?;
+        let total_count: i64 = total_count_row.get("count");
+
         let rows = sqlx::query("SELECT * FROM functions ORDER BY function_name LIMIT ? OFFSET ?")
             .bind(limit)
             .bind(offset)
@@ -514,6 +521,7 @@ impl ControlPlane {
         Ok(ListFunctionsResponse {
             functions: functions?,
             next_marker,
+            total_count: Some(total_count as u32),
         })
     }
 
@@ -1077,6 +1085,10 @@ impl ControlPlane {
         let total = tokio::time::Duration::from_secs(function.timeout);
         match tokio::time::timeout(total, rx).await {
             Ok(Ok(result)) => {
+                // Calculate duration
+                let end_time = chrono::Utc::now();
+                let duration_ms = (end_time - start_time).num_milliseconds() as u64;
+                
                 // Success: build Lambda response
                 if result.ok {
                     Ok(InvokeResponse {
@@ -1089,6 +1101,7 @@ impl ControlPlane {
                         function_error: None,
                         log_result: result.log_tail_b64,
                         headers: std::collections::HashMap::new(),
+                        duration_ms: Some(duration_ms),
                     })
                 } else {
                     // Function error: return 200 with X-Amz-Function-Error header
@@ -1107,6 +1120,7 @@ impl ControlPlane {
                         }),
                         log_result: result.log_tail_b64,
                         headers: std::collections::HashMap::new(),
+                        duration_ms: Some(duration_ms),
                     })
                 }
             }
@@ -1116,6 +1130,7 @@ impl ControlPlane {
 
                 // Record init error in execution record (deferred async)
                 let end_time = chrono::Utc::now();
+                let duration_ms = (end_time - start_time).num_milliseconds() as u64;
                 self.execution_tracker
                     .record_execution_init_error(req_id.clone(), end_time);
 
@@ -1129,6 +1144,7 @@ impl ControlPlane {
                     function_error: Some(FunctionError::Unhandled),
                     log_result: None,
                     headers: std::collections::HashMap::new(),
+                    duration_ms: Some(duration_ms),
                 })
             }
             Err(_elapsed) => {
@@ -1145,6 +1161,7 @@ impl ControlPlane {
 
                 // Record timeout in execution record (deferred async)
                 let end_time = chrono::Utc::now();
+                let duration_ms = (end_time - start_time).num_milliseconds() as u64;
                 self.execution_tracker
                     .record_execution_timeout(req_id.clone(), end_time);
 
@@ -1155,6 +1172,7 @@ impl ControlPlane {
                     function_error: Some(FunctionError::Unhandled),
                     log_result: None,
                     headers: std::collections::HashMap::new(),
+                    duration_ms: Some(duration_ms),
                 })
             }
         }

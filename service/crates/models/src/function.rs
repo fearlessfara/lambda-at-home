@@ -147,6 +147,7 @@ pub struct UpdateAliasRequest {
 pub struct ListFunctionsResponse {
     pub functions: Vec<Function>,
     pub next_marker: Option<String>,
+    pub total_count: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

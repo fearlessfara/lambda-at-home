@@ -4,6 +4,28 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
+// Check if WebSocket should be used
+const USE_WEBSOCKET = process.env.LAMBDA_USE_WEBSOCKET !== 'false';
+const HAS_WS_LIBRARY = (() => {
+  try {
+    require.resolve('ws');
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+// Use WebSocket if available and not explicitly disabled
+if (USE_WEBSOCKET && HAS_WS_LIBRARY) {
+  console.log('Using WebSocket runtime (ws library available)');
+  require('./bootstrap-websocket.js');
+  process.exit(0);
+} else if (USE_WEBSOCKET && !HAS_WS_LIBRARY) {
+  console.log('WebSocket requested but ws library not available, falling back to HTTP');
+} else {
+  console.log('Using HTTP runtime (WebSocket disabled)');
+}
+
 // Runtime API configuration (supports values with or without scheme)
 const RAW_RUNTIME_API = process.env.AWS_LAMBDA_RUNTIME_API || 'host.docker.internal:9001';
 function parseRuntimeApiHostPort(raw) {

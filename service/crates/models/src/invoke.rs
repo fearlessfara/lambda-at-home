@@ -63,6 +63,7 @@ pub struct InvokeResponse {
     pub function_error: Option<FunctionError>,
     pub log_result: Option<String>, // base64 encoded log tail
     pub headers: HashMap<String, String>,
+    pub duration_ms: Option<u64>, // Execution duration in milliseconds
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

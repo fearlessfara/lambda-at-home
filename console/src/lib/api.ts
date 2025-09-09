@@ -42,8 +42,15 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
 export const api = {
   // Function management
-  async listFunctions(): Promise<ListFunctionsResponse> {
-    const response = await fetch(`${API_BASE_URL}/2015-03-31/functions`);
+  async listFunctions(params?: { marker?: string; maxItems?: number }): Promise<ListFunctionsResponse> {
+    const url = new URL(`${API_BASE_URL}/2015-03-31/functions`);
+    if (params?.marker) {
+      url.searchParams.set('Marker', params.marker);
+    }
+    if (params?.maxItems) {
+      url.searchParams.set('MaxItems', params.maxItems.toString());
+    }
+    const response = await fetch(url.toString());
     return handleResponse(response);
   },
   // Secrets admin
@@ -182,8 +189,6 @@ export const api = {
     logResult?: string;
     duration?: number;
   }> {
-    const startTime = Date.now();
-    
     const response = await fetch(`${API_BASE_URL}/2015-03-31/functions/${encodeURIComponent(name)}/invocations`, {
       method: 'POST',
       headers: {
@@ -193,9 +198,6 @@ export const api = {
       },
       body: JSON.stringify(payload),
     });
-
-    const endTime = Date.now();
-    const duration = endTime - startTime;
 
     if (!response.ok) {
       let errorShape: ErrorShape | undefined;
@@ -213,6 +215,10 @@ export const api = {
     }
 
     const responseData = await response.json();
+    
+    // Get duration from server-provided header
+    const durationHeader = response.headers.get('X-Amz-Duration');
+    const duration = durationHeader ? parseInt(durationHeader, 10) : undefined;
     
     return {
       response: responseData,

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, ArrowLeft } from 'lucide-react';
+import { Upload, ArrowLeft, Loader2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
@@ -107,7 +107,8 @@ export function CreateFunction() {
         description: `Function "${formData.functionName}" has been created successfully.`,
       });
       
-      navigate('/functions');
+      // Navigate to the specific function's detail page
+      navigate(`/functions/${encodeURIComponent(formData.functionName)}`);
     } catch (error) {
       toast({
         title: "Error",
@@ -136,6 +137,28 @@ export function CreateFunction() {
 
   return (
     <div className="space-y-6">
+      {/* Processing Modal */}
+      {(createFunction.isPending || isUploading) && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex items-center space-x-3">
+              <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+              <div>
+                <h3 className="text-lg font-semibold">Creating Function</h3>
+                <p className="text-sm text-muted-foreground">
+                  Please wait while we create your function...
+                </p>
+              </div>
+            </div>
+            <div className="mt-4">
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="bg-blue-600 h-2 rounded-full animate-pulse" style={{ width: '60%' }}></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center space-x-4">
         <Button variant="outline" size="sm" onClick={() => navigate('/functions')}>
           <ArrowLeft className="mr-2 h-4 w-4" />
@@ -157,7 +180,7 @@ export function CreateFunction() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6" style={{ opacity: (createFunction.isPending || isUploading) ? 0.5 : 1, pointerEvents: (createFunction.isPending || isUploading) ? 'none' : 'auto' }}>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="functionName">Function Name *</Label>
@@ -325,7 +348,14 @@ export function CreateFunction() {
                 type="submit"
                 disabled={createFunction.isPending || isUploading}
               >
-                {createFunction.isPending || isUploading ? 'Creating...' : 'Create Function'}
+                {createFunction.isPending || isUploading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating Function...
+                  </>
+                ) : (
+                  'Create Function'
+                )}
               </Button>
             </div>
           </form>

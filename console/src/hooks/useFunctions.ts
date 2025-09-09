@@ -2,10 +2,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { CreateFunctionRequest } from '../types/api';
 
-export function useFunctions() {
+export function useFunctions(params?: { marker?: string; maxItems?: number }) {
   return useQuery({
-    queryKey: ['functions'],
-    queryFn: () => api.listFunctions(),
+    queryKey: ['functions', params],
+    queryFn: () => api.listFunctions(params),
     refetchInterval: 5000, // Refetch every 5 seconds
   });
 }

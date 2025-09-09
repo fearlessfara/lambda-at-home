@@ -8,10 +8,14 @@ description = "Runtime API for Lambda@Home containers"
 
 [dependencies]
 # Web framework
-axum = { workspace = true }
+axum = { workspace = true, features = ["ws"] }
 tokio = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
+
+# WebSocket support
+axum-extra = { version = "0.9", features = ["typed-header"] }
+tokio-tungstenite = "0.21"
 
 # Shared models
 lambda-models = { path = "../models" }
@@ -25,6 +29,7 @@ serde_json = { workspace = true }
 
 # Async utilities
 futures = { workspace = true }
+futures-util = { workspace = true }
 uuid = { workspace = true }
 async-trait = { workspace = true }
 
