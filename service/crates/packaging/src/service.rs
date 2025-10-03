@@ -32,6 +32,7 @@ impl PackagingService {
         &mut self,
         function: &Function,
         image_ref: &str,
+        runtime_api_port: u16,
     ) -> Result<(), LambdaError> {
         // Get the ZIP data for this function
         let zip_data = self.cache.load_zip_file(&function.code_sha256)?;
@@ -44,7 +45,7 @@ impl PackagingService {
 
         // Build new image
         self.image_builder
-            .build_image(function, &zip_info, image_ref)
+            .build_image(function, &zip_info, image_ref, runtime_api_port)
             .await?;
 
         // Cache the result

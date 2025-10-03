@@ -44,6 +44,7 @@ export interface FunctionCode {
 export interface ListFunctionsResponse {
   functions: Function[];
   next_marker?: string;
+  total_count?: number;
 }
 
 export interface InvokeRequest {

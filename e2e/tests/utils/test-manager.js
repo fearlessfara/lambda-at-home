@@ -6,12 +6,18 @@ const fs = require('fs');
 const path = require('path');
 const TestClient = require('./test-client');
 const DockerUtils = require('./docker-utils');
+const CleanupManager = require('./cleanup-manager');
 
 class TestManager {
-    constructor() {
+    constructor(options = {}) {
         this.client = new TestClient();
         this.functions = new Set();
         this.testFunctionZip = null;
+        this.cleanupManager = new CleanupManager(this.client, {
+            verbose: options.verbose || false,
+            cleanupTimeoutMs: options.cleanupTimeoutMs || 60000,
+            containerTracking: options.containerTracking !== false
+        });
     }
 
     async setup() {
@@ -23,36 +29,52 @@ class TestManager {
         this.testFunctionZip = fs.readFileSync(zipPath).toString('base64');
 
         // Check server health
-        const health = await this.client.healthCheck();
-        if (!health.healthy) {
-            throw new Error(`Lambda@Home server is not healthy: ${health.error || 'Unknown error'}`);
-        }
+        await this.waitForServerHealth();
     }
 
-    async teardown() {
-        // Clean up functions using the delete API
-        const cleanupPromises = Array.from(this.functions).map(async (functionName) => {
+
+    async waitForServerHealth(maxWaitMs = 10000) {
+        const startTime = Date.now();
+        let lastError = null;
+
+        while (Date.now() - startTime < maxWaitMs) {
             try {
-                const result = await this.client.deleteFunction(functionName);
-                console.log(`✅ Deleted function: ${functionName}`);
+                const health = await this.client.healthCheck();
+                if (health.healthy) {
+                    return;
+                }
+                lastError = health.error || 'Server not healthy';
             } catch (error) {
-                console.error(`❌ Failed to delete function ${functionName}: ${error.message}`);
+                lastError = error.message;
             }
+
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
+        throw new Error(`Server did not become healthy within ${maxWaitMs}ms. Last error: ${lastError}`);
+    }
+
+    async teardown(options = {}) {
+        // Use centralized cleanup manager for proper cleanup with retry and verification
+        const cleanupResult = await this.cleanupManager.cleanup({
+            parallel: options.parallel !== false,
+            verifyCleanup: options.verifyCleanup !== false,
+            forceRemoveContainers: options.forceRemoveContainers !== false
         });
 
-        await Promise.all(cleanupPromises);
+        // Clear local function registry
         this.functions.clear();
-        
-        // Note: Containers are automatically cleaned up when functions are deleted
-        // No need to manually kill containers - the delete API handles this
-        
+
         // Close HTTP connections
         this.client.close();
+
+        return cleanupResult;
     }
+
 
     async createTestFunction(name, runtime = 'nodejs22.x') {
         const functionName = `${name}-${Date.now()}`;
-        
+
         try {
             const functionData = await this.client.createFunction(
                 functionName,
@@ -60,12 +82,13 @@ class TestManager {
                 'index.handler',
                 this.testFunctionZip
             );
-            
+
             this.functions.add(functionName);
-            
+            this.cleanupManager.registerFunction(functionName);
+
             // Wait for function to be ready
             await this.waitForFunctionReady(functionName);
-            
+
             return {
                 name: functionName,
                 data: functionData,
@@ -177,6 +200,59 @@ class TestManager {
             waitMs,
             { index: index, sequence: true }
         );
+    }
+
+    // Container monitoring helpers - delegate to CleanupManager
+
+    /**
+     * Get current count of containers for a function
+     */
+    getFunctionContainerCount(functionName) {
+        return this.cleanupManager.getFunctionContainers(functionName);
+    }
+
+    /**
+     * Wait for containers to reach a specific count
+     */
+    async waitForContainerCount(functionName, targetCount, timeoutMs = 10000) {
+        return await this.cleanupManager.waitForContainerCount(functionName, targetCount, timeoutMs);
+    }
+
+    /**
+     * Get a snapshot of all Lambda containers
+     */
+    getContainerSnapshot() {
+        return this.cleanupManager.getContainerSnapshot();
+    }
+
+    /**
+     * Get cleanup status report
+     */
+    getCleanupStatus() {
+        return this.cleanupManager.getCleanupStatus();
+    }
+
+    /**
+     * Manually delete a function and unregister it
+     */
+    async deleteFunction(functionName) {
+        try {
+            await this.client.deleteFunction(functionName);
+            this.functions.delete(functionName);
+            this.cleanupManager.unregisterFunction(functionName);
+            return true;
+        } catch (error) {
+            console.error(`Failed to delete function ${functionName}: ${error.message}`);
+            return false;
+        }
+    }
+
+    /**
+     * Emergency cleanup - removes ALL Lambda containers
+     */
+    async emergencyCleanup() {
+        await this.cleanupManager.emergencyCleanup();
+        this.functions.clear();
     }
 }
 

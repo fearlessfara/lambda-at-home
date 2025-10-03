@@ -490,6 +490,12 @@ pub async fn invoke_function(
                 }
             }
 
+            if let Some(duration_ms) = &response.duration_ms {
+                if let Ok(header_value) = HeaderValue::from_str(&duration_ms.to_string()) {
+                    response_headers.insert("X-Amz-Duration", header_value);
+                }
+            }
+
             // Add custom headers
             for (key, value) in response.headers {
                 if let Ok(header_name) = HeaderName::from_bytes(key.as_bytes()) {

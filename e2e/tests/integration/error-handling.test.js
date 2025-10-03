@@ -2,18 +2,31 @@
  * Error Handling and Edge Case Tests
  */
 
+const { describe, test, before, after } = require('node:test');
+const assert = require('node:assert');
 const testData = require('../fixtures/test-data');
+const {
+    assertValidLambdaResponse,
+    assertWithinPerformanceThreshold,
+    assertSuccessfulInvocations,
+    assertMatchObject
+} = require('../utils/assertions');
+const { cleanupSingleFunction } = require('../utils/test-helpers');
+
+require('../setup');
 
 describe('Lambda@Home Error Handling and Edge Case Tests', () => {
     let testFunction;
 
-    beforeAll(async () => {
+    before(async () => {
         testFunction = await createTestFunction('error-handling-test');
     });
 
-    afterAll(async () => {
-        await global.testManager.client.deleteFunction(testFunction.name);
-    });
+    after(cleanupSingleFunction(() => testFunction, global.testManager.client, {
+        timeout: 60000,
+        verifyCleanup: true,
+        forceRemoveContainers: true
+    }));
 
     describe('Function Error Handling', () => {
         test('should handle invalid function names gracefully', async () => {
@@ -22,11 +35,11 @@ describe('Lambda@Home Error Handling and Edge Case Tests', () => {
             try {
                 await global.testManager.client.invokeFunction(invalidFunctionName, { test: 'data' });
                 // If we get here, the test should fail
-                expect(true).toBe(false);
+                assert.fail('Should have thrown an error for non-existent function');
             } catch (error) {
                 // Should get an error for non-existent function
-                expect(error.message).toBeDefined();
-                expect(error.message).toContain('404');
+                assert.ok(error.message !== undefined);
+                assert.ok(error.message.includes('404'));
             }
         });
 
@@ -50,10 +63,10 @@ describe('Lambda@Home Error Handling and Edge Case Tests', () => {
                     );
 
                     // Should handle gracefully
-                    expect(result).toBeDefined();
+                    assert.ok(result !== undefined);
                 } catch (error) {
                     // Some malformed payloads might cause errors, which is acceptable
-                    expect(error.message).toBeDefined();
+                    assert.ok(error.message !== undefined);
                 }
             }
         });
@@ -73,14 +86,15 @@ describe('Lambda@Home Error Handling and Edge Case Tests', () => {
 
             try {
                 const result = await measureInvocation(testFunction.name, timeoutPayload);
-                
+
+
                 // Should either complete or timeout gracefully
                 if (result.result) {
-                    expect(result.result).toBeDefined();
+                    assert.ok(result.result !== undefined);
                 }
             } catch (error) {
                 // Timeout errors are acceptable
-                expect(error.message).toBeDefined();
+                assert.ok(error.message !== undefined);
             }
         });
     });
@@ -92,17 +106,17 @@ describe('Lambda@Home Error Handling and Edge Case Tests', () => {
             // Test invalid function creation
             try {
                 await client.createFunction('', 'nodejs22.x', 'index.handler', 'invalid-base64');
-                expect(true).toBe(false);
+                assert.fail('Should have thrown an error for invalid function creation');
             } catch (error) {
-                expect(error.message).toBeDefined();
+                assert.ok(error.message !== undefined);
             }
 
             // Test invalid function update
             try {
                 await client.createFunction('invalid-function-name!@#', 'nodejs22.x', 'index.handler', 'dGVzdA==');
-                expect(true).toBe(false);
+                assert.fail('Should have thrown an error for invalid function name');
             } catch (error) {
-                expect(error.message).toBeDefined();
+                assert.ok(error.message !== undefined);
             }
         });
 
@@ -123,13 +137,13 @@ describe('Lambda@Home Error Handling and Edge Case Tests', () => {
                 );
 
             const results = await runConcurrentInvocations(testFunction.name, 3, payloadGenerator);
-            
+
             // Should handle concurrent errors gracefully
-            expect(results).toHaveLength(3);
-            
+            assert.strictEqual(results.length, 3);
+
             for (const result of results) {
                 // Each result should either succeed or fail gracefully
-                expect(result.result || result.error).toBeDefined();
+                assert.ok((result.result || result.error) !== undefined);
             }
         });
     });
@@ -152,13 +166,13 @@ describe('Lambda@Home Error Handling and Edge Case Tests', () => {
 
                 try {
                     const result = await measureInvocation(testFunction.name, payload);
-                    
+
                     if (result.result) {
-                        expect(result.result).toBeValidLambdaResponse();
+                        assertValidLambdaResponse(result.result);
                     }
                 } catch (error) {
                     // Memory pressure might cause errors, which is acceptable
-                    expect(error.message).toBeDefined();
+                    assert.ok(error.message !== undefined);
                 }
             }
         });
@@ -177,14 +191,14 @@ describe('Lambda@Home Error Handling and Edge Case Tests', () => {
 
             try {
                 const result = await measureInvocation(testFunction.name, cpuIntensivePayload);
-                
+
                 if (result.result) {
-                    expect(result.result).toBeValidLambdaResponse();
-                    expect(result.duration).toBeWithinPerformanceThreshold(testData.performanceThresholds.slowExecution);
+                    assertValidLambdaResponse(result.result);
+                    assertWithinPerformanceThreshold(result.duration, testData.performanceThresholds.slowExecution);
                 }
             } catch (error) {
                 // CPU-intensive operations might timeout, which is acceptable
-                expect(error.message).toBeDefined();
+                assert.ok(error.message !== undefined);
             }
         });
     });
@@ -209,7 +223,7 @@ describe('Lambda@Home Error Handling and Edge Case Tests', () => {
                     edgeCasePayloads[i]
                 );
 
-                expect(result).toBeValidLambdaResponse();
+                assertValidLambdaResponse(result);
             }
         });
 
@@ -231,8 +245,8 @@ describe('Lambda@Home Error Handling and Edge Case Tests', () => {
                     specialCharPayloads[i]
                 );
 
-                expect(result).toBeValidLambdaResponse();
-                expect(result.event).toMatchObject(specialCharPayloads[i]);
+                assertValidLambdaResponse(result);
+                assertMatchObject(result.event, specialCharPayloads[i]);
             }
         });
 
@@ -254,12 +268,12 @@ describe('Lambda@Home Error Handling and Edge Case Tests', () => {
             }
 
             const results = await Promise.all(rapidInvocations);
-            
+
             // All should complete successfully
-            expect(results).toHaveLength(10);
-            
+            assert.strictEqual(results.length, 10);
+
             for (const result of results) {
-                expect(result.result).toBeValidLambdaResponse();
+                assertValidLambdaResponse(result.result);
             }
         });
     });
@@ -293,7 +307,7 @@ describe('Lambda@Home Error Handling and Edge Case Tests', () => {
 
             // At least some should succeed
             const successCount = results.filter(r => r.success).length;
-            expect(successCount).toBeGreaterThanOrEqual(2);
+            assert.ok(successCount >= 2);
         });
 
         test('should maintain stability under error conditions', async () => {
@@ -314,10 +328,10 @@ describe('Lambda@Home Error Handling and Edge Case Tests', () => {
                         condition.data
                     );
 
-                    expect(result).toBeValidLambdaResponse();
+                    assertValidLambdaResponse(result);
                 } catch (error) {
                     // Some error conditions might cause failures, which is acceptable
-                    expect(error.message).toBeDefined();
+                    assert.ok(error.message !== undefined);
                 }
             }
         });

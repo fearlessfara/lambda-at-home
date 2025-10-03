@@ -12,10 +12,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Cache npm
         uses: actions/cache@v4
@@ -203,6 +203,63 @@ jobs:
             echo "✅ All expected binaries found!"
           fi
 
+          # Generate minimal release notes with inline checksums
+          TAG="${{ github.ref_name }}"
+          cat > RELEASE_BODY.md << EOF
+          ## Lambda@Home ${TAG}
+
+### Quick Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/fearlessfara/lambda-at-home/main/install-lambda-at-home.sh | bash
+```
+
+### Manual Installation
+
+Linux x86_64:
+```bash
+wget https://github.com/fearlessfara/lambda-at-home/releases/download/${TAG}/lambda-at-home-server-${TAG}-linux-x86_64
+chmod +x lambda-at-home-server-${TAG}-linux-x86_64
+sudo mv lambda-at-home-server-${TAG}-linux-x86_64 /usr/local/bin/lambda-at-home-server
+```
+
+Linux ARM64:
+```bash
+wget https://github.com/fearlessfara/lambda-at-home/releases/download/${TAG}/lambda-at-home-server-${TAG}-linux-arm64
+chmod +x lambda-at-home-server-${TAG}-linux-arm64
+sudo mv lambda-at-home-server-${TAG}-linux-arm64 /usr/local/bin/lambda-at-home-server
+```
+
+macOS x86_64 (Intel):
+```bash
+curl -L -o lambda-at-home-server https://github.com/fearlessfara/lambda-at-home/releases/download/${TAG}/lambda-at-home-server-${TAG}-macos-x86_64
+chmod +x lambda-at-home-server
+sudo mv lambda-at-home-server /usr/local/bin/
+```
+
+macOS ARM64 (Apple Silicon):
+```bash
+curl -L -o lambda-at-home-server https://github.com/fearlessfara/lambda-at-home/releases/download/${TAG}/lambda-at-home-server-${TAG}-macos-arm64
+chmod +x lambda-at-home-server
+sudo mv lambda-at-home-server /usr/local/bin/
+```
+
+          ### Binaries + SHA-256
+EOF
+
+          # Append checksums inline for each binary
+          {
+            for f in lambda-at-home-server-*; do
+              [[ -f "$f" ]] || continue
+              sha_file="${f}.sha256"
+              if [[ -f "$sha_file" ]]; then
+                sha=$(sed 's/ .*//' "$sha_file")
+                printf -- "- %s (SHA-256: %s)\n" "$f" "$sha"
+              fi
+            done
+          } >> RELEASE_BODY.md
+          mv RELEASE_BODY.md release-assets/
+
       - name: Check if release exists
         id: check-release
         run: |
@@ -222,85 +279,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: Lambda@Home ${{ github.ref_name }}
           generate_release_notes: false
-          body: |
-            ## Lambda@Home ${{ github.ref_name }}
-            
-            ### Quick Installation
-            
-            Download and install the binary for your platform:
-            
-            ```bash
-            curl -fsSL https://raw.githubusercontent.com/fearlessfara/lambda-at-home/main/install-lambda-at-home.sh | bash
-            ```
-            
-            ### Manual Installation
-            
-            Download the appropriate binary for your platform:
-            
-            **Linux x86_64:**
-            ```bash
-            wget https://github.com/fearlessfara/lambda-at-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-linux-x86_64
-            chmod +x lambda-at-home-server-${{ github.ref_name }}-linux-x86_64
-            sudo mv lambda-at-home-server-${{ github.ref_name }}-linux-x86_64 /usr/local/bin/lambda-at-home-server
-            ```
-            
-            **Linux ARM64:**
-            ```bash
-            wget https://github.com/fearlessfara/lambda-at-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-linux-arm64
-            chmod +x lambda-at-home-server-${{ github.ref_name }}-linux-arm64
-            sudo mv lambda-at-home-server-${{ github.ref_name }}-linux-arm64 /usr/local/bin/lambda-at-home-server
-            ```
-            
-            **macOS x86_64 (Intel):**
-            ```bash
-            curl -L -o lambda-at-home-server https://github.com/fearlessfara/lambda-at-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-macos-x86_64
-            chmod +x lambda-at-home-server
-            sudo mv lambda-at-home-server /usr/local/bin/
-            ```
-            
-            **macOS ARM64 (Apple Silicon):**
-            ```bash
-            curl -L -o lambda-at-home-server https://github.com/fearlessfara/lambda-at-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-macos-arm64
-            chmod +x lambda-at-home-server
-            sudo mv lambda-at-home-server /usr/local/bin/
-            ```
-            
-            ### Available Binaries
-            
-            This release includes the following binaries:
-            
-            - `lambda-at-home-server-${{ github.ref_name }}-linux-x86_64` - Linux x86_64
-            - `lambda-at-home-server-${{ github.ref_name }}-linux-arm64` - Linux ARM64
-            - `lambda-at-home-server-${{ github.ref_name }}-macos-x86_64` - macOS Intel
-            - `lambda-at-home-server-${{ github.ref_name }}-macos-arm64` - macOS Apple Silicon
-            
-            Each binary includes a corresponding `.sha256` checksum file for verification.
-            
-            ### Features
-            
-            - 🐳 Docker-backed AWS Lambda clone
-            - 🌐 Embedded web console (no separate setup needed)
-            - 🚀 Multi-runtime support (Node.js, Python, Rust)
-            - ⚡ Warm container pool with auto-scaling
-            - 🔌 AWS Lambda-compatible APIs
-            - 📊 Prometheus metrics and structured logging
-            
-            ### Usage
-            
-            ```bash
-            # Start the server
-            lambda-at-home-server
-            
-            # Access the web console
-            open http://localhost:9000
-            
-            # API endpoints
-            curl http://localhost:9000/healthz
-            ```
-            
-            ### Documentation
-            
-            See [INSTALL.md](INSTALL.md) for detailed installation instructions.
+          body_path: release-assets/RELEASE_BODY.md
           files: release-assets/*
           draft: false
           prerelease: false

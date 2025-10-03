@@ -1,8 +1,10 @@
 ---
-description: Lambda@home architecture & invariants (local daemon, Docker-as-microVM)
-globs: ["**/*"]
+description: Global architecture invariants for serverless@home (Lambda@home, States@home). Keep answers consistent system-wide.
+globs:
+  - "**/*"
 alwaysApply: true
 ---
+
 
 # System
 - Runs as a **local daemon** (systemd or bare process), not inside Docker.

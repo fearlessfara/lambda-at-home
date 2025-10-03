@@ -5,7 +5,7 @@
 const axios = require('axios');
 
 class TestClient {
-    constructor(baseUrl = 'http://127.0.0.1:9000') {
+    constructor(baseUrl = 'http://127.0.0.1:8000') {
         this.baseUrl = baseUrl;
         this.client = axios.create({
             baseURL: baseUrl,
@@ -21,14 +21,14 @@ class TestClient {
 
     async healthCheck() {
         try {
-            const response = await this.client.get('/api/healthz');
+            const response = await this.client.get('/healthz');
             return { healthy: response.status === 200, status: response.status };
         } catch (error) {
             return { healthy: false, error: error.message };
         }
     }
 
-    async createFunction(functionName, runtime = 'nodejs22.x', handler = 'index.handler', zipData) {
+    async createFunction(functionName, runtime = 'nodejs22.x', handler = 'index.handler', zipData, options = {}) {
         const payload = {
             function_name: functionName,
             runtime: runtime,
@@ -37,11 +37,11 @@ class TestClient {
                 zip_file: zipData
             },
             description: `Test function for ${functionName}`,
-            timeout: 30,
-            memory_size: 512
+            timeout: options.timeout || 30,
+            memory_size: options.memory_size || 512
         };
 
-        const response = await this.client.post('/api/2015-03-31/functions', payload);
+        const response = await this.client.post('/2015-03-31/functions', payload);
         return response.data;
     }
 
@@ -52,7 +52,7 @@ class TestClient {
         };
 
         const response = await this.client.post(
-            `/api/2015-03-31/functions/${functionName}/invocations`,
+            `/2015-03-31/functions/${functionName}/invocations`,
             payload,
             { headers: invokeHeaders }
         );
@@ -60,31 +60,27 @@ class TestClient {
     }
 
     async getFunction(functionName) {
-        const response = await this.client.get(`/api/2015-03-31/functions/${functionName}`);
+        const response = await this.client.get(`/2015-03-31/functions/${functionName}`);
         return response.data;
     }
 
     async listFunctions() {
-        const response = await this.client.get('/api/2015-03-31/functions');
+        const response = await this.client.get('/2015-03-31/functions');
         return response.data;
     }
 
     async deleteFunction(functionName) {
-        try {
-            await this.client.delete(`/api/2015-03-31/functions/${functionName}`);
-            return { success: true };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
+        const response = await this.client.delete(`/2015-03-31/functions/${functionName}`);
+        return response.data;
     }
 
     async getMetrics() {
-        const response = await this.client.get('/api/metrics');
+        const response = await this.client.get('/metrics');
         return response.data;
     }
 
     async getWarmPool(functionName) {
-        const response = await this.client.get(`/api/admin/warm-pool/${functionName}`);
+        const response = await this.client.get(`/admin/warm-pool/${functionName}`);
         return response.data;
     }
 
@@ -95,7 +91,7 @@ class TestClient {
             function_name: functionName
         };
 
-        const response = await this.client.post('/api/admin/api-gateway/routes', payload);
+        const response = await this.client.post('/admin/api-gateway/routes', payload);
         return response.data;
     }
 

@@ -1,53 +1,33 @@
 {
   "name": "lambda-at-home-e2e-tests",
-  "version": "1.0.0",
-  "description": "End-to-end test suite for Lambda@Home using Jest",
+  "version": "0.2.0",
+  "description": "End-to-end test suite for Lambda@Home using Node.js native test runner",
   "main": "tests/setup.js",
   "scripts": {
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
-    "test:service": "jest --testNamePattern='Service'",
-    "test:metrics": "jest --testNamePattern='Metrics'",
-    "test:runtimes": "jest --testNamePattern='Runtimes'",
-    "test:apigw": "jest --testNamePattern='API Gateway'",
-    "test:autoscaling": "jest --testNamePattern='Autoscaling'",
-    "test:integration": "jest --testPathPattern='integration'",
-    "test:unit": "jest --testPathPattern='unit'",
+    "test": "node --test --test-concurrency=1 tests/integration/*.test.js",
+    "test:managed": "node --test --test-concurrency=1 tests/integration/*.test.js",
+    "test:external": "SKIP_SERVICE_START=1 node --test --test-concurrency=1 tests/integration/*.test.js",
+    "test:watch": "SKIP_SERVICE_START=1 node --test --watch tests/integration/*.test.js",
+    "test:coverage": "node --test --experimental-test-coverage tests/integration/*.test.js",
+    "test:performance": "SKIP_SERVICE_START=1 node --test tests/integration/performance.test.js",
+    "test:service": "SKIP_SERVICE_START=1 node --test tests/integration/service.test.js",
+    "test:runtimes": "SKIP_SERVICE_START=1 node --test tests/integration/runtimes.test.js",
+    "test:integration": "node --test --test-concurrency=1 tests/integration/*.test.js",
     "cleanup": "node utils/cleanup.js"
   },
-  "keywords": ["lambda", "test", "jest", "lambda-at-home", "integration"],
+  "keywords": [
+    "lambda",
+    "test",
+    "node:test",
+    "lambda-at-home",
+    "integration"
+  ],
   "author": "Lambda@Home",
   "license": "MIT",
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=24.0.0"
   },
   "devDependencies": {
-    "jest": "^29.7.0",
-    "@types/jest": "^29.5.8",
-    "supertest": "^6.3.3",
     "axios": "^1.6.0"
-  },
-  "jest": {
-    "testEnvironment": "node",
-    "testMatch": [
-      "**/tests/**/*.test.js",
-      "**/tests/**/*.spec.js"
-    ],
-    "collectCoverageFrom": [
-      "**/*.js",
-      "!**/node_modules/**",
-      "!**/tests/**",
-      "!**/coverage/**"
-    ],
-    "coverageDirectory": "coverage",
-    "coverageReporters": ["text", "lcov", "html"],
-    "setupFilesAfterEnv": ["<rootDir>/tests/setup.js"],
-    "testTimeout": 60000,
-    "verbose": true,
-    "forceExit": true,
-    "detectOpenHandles": true,
-    "clearMocks": true,
-    "restoreMocks": true
   }
 }

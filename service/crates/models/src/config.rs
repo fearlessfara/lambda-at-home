@@ -67,8 +67,8 @@ impl Default for Config {
         Self {
             server: ServerConfig {
                 bind: "127.0.0.1".to_string(),
-                port_user_api: 9000,
-                port_runtime_api: 9001,
+                port_user_api: 8000,
+                port_runtime_api: 8001,
                 max_request_body_size_mb: 50, // 50MB default limit
             },
             data: DataConfig {

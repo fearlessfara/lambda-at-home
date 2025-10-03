@@ -32,13 +32,56 @@ class DockerUtils {
     static getLambdaContainers() {
         try {
             const output = execSync('docker ps --format "{{.Names}}\t{{.Status}}" | grep "^lambda-"', { encoding: 'utf8' });
+            if (!output.trim()) {
+                return [];
+            }
             return output.trim().split('\n').map(line => {
                 const [name, status] = line.split('\t');
                 return { name, status };
-            });
+            }).filter(c => c.name);
         } catch (error) {
             return [];
         }
+    }
+
+    static getAllLambdaContainers(includeExited = false) {
+        try {
+            const psFlag = includeExited ? 'ps -a' : 'ps';
+            const output = execSync(`docker ${psFlag} --format "{{.Names}}\t{{.Status}}\t{{.ID}}" | grep "^lambda-"`, { encoding: 'utf8' });
+            if (!output.trim()) {
+                return [];
+            }
+            return output.trim().split('\n').map(line => {
+                const [name, status, id] = line.split('\t');
+                return { name, status, id };
+            }).filter(c => c.name);
+        } catch (error) {
+            return [];
+        }
+    }
+
+    static getLambdaContainersByFunction(functionName, includeExited = false) {
+        try {
+            const psFlag = includeExited ? 'ps -a' : 'ps';
+            const output = execSync(
+                `docker ${psFlag} --format "{{.Names}}\t{{.Status}}\t{{.ID}}" | grep "^lambda-${functionName}-"`,
+                { encoding: 'utf8' }
+            );
+            if (!output.trim()) {
+                return [];
+            }
+            return output.trim().split('\n').map(line => {
+                const [name, status, id] = line.split('\t');
+                return { name, status, id };
+            }).filter(c => c.name);
+        } catch (error) {
+            return [];
+        }
+    }
+
+    static getTotalLambdaContainerCount(includeExited = false) {
+        const containers = this.getAllLambdaContainers(includeExited);
+        return containers.length;
     }
 
     static async waitForContainerCount(functionName, targetCount, timeoutMs = 10000) {

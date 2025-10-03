@@ -129,7 +129,7 @@ async fn create_sets_security_hardening_and_runtime_env() {
             ("AWS_LAMBDA_FUNCTION_NAME".into(), "hello".into()),
             (
                 "AWS_LAMBDA_RUNTIME_API".into(),
-                "host.docker.internal:9001".into(),
+                "host.docker.internal:8001".into(),
             ),
         ],
         extra_hosts: vec!["host.docker.internal:host-gateway".into()],
@@ -173,7 +173,7 @@ async fn create_sets_security_hardening_and_runtime_env() {
     );
     assert_eq!(
         env.get("AWS_LAMBDA_RUNTIME_API").map(|s| s.as_str()),
-        Some("host.docker.internal:9001")
+        Some("host.docker.internal:8001")
     );
     assert!(created
         .extra_hosts

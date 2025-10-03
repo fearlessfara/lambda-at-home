@@ -8,6 +8,16 @@ import urllib.error
 import time
 import traceback
 
+# Check if WebSocket support is available and enabled
+USE_WEBSOCKET = os.environ.get('LAMBDA_USE_WEBSOCKET', 'true').lower() != 'false'
+HAS_WEBSOCKETS = False
+
+try:
+    import websockets
+    HAS_WEBSOCKETS = True
+except ImportError:
+    HAS_WEBSOCKETS = False
+
 RUNTIME_API = os.environ.get('AWS_LAMBDA_RUNTIME_API', 'localhost:9001')
 FUNCTION_NAME = os.environ.get('AWS_LAMBDA_FUNCTION_NAME')
 FUNCTION_VERSION = os.environ.get('AWS_LAMBDA_FUNCTION_VERSION')
@@ -122,4 +132,18 @@ def main():
             time.sleep(1)
 
 if __name__ == '__main__':
-    main()
+    if USE_WEBSOCKET and HAS_WEBSOCKETS:
+        print('Starting WebSocket runtime...')
+        try:
+            # Try to start WebSocket runtime
+            import bootstrap_websocket
+            # The WebSocket runtime will handle its own startup
+        except Exception as error:
+            print(f'Failed to start WebSocket runtime, falling back to HTTP: {error}', file=sys.stderr)
+            main()
+    else:
+        if not HAS_WEBSOCKETS:
+            print('WebSocket library not available, using HTTP runtime')
+        else:
+            print('WebSocket disabled, using HTTP runtime')
+        main()

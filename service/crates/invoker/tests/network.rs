@@ -125,7 +125,7 @@ async fn container_can_reach_runtime_api_via_host_alias() {
         name: "fn-ric".into(),
         env: vec![(
             "AWS_LAMBDA_RUNTIME_API".into(),
-            "host.docker.internal:9001".into(),
+            "host.docker.internal:8001".into(),
         )],
         extra_hosts: vec!["host.docker.internal:host-gateway".into()],
         read_only_root_fs: true,
@@ -147,7 +147,7 @@ async fn container_can_reach_runtime_api_via_host_alias() {
         .collect::<std::collections::HashMap<_, _>>();
     assert_eq!(
         env.get("AWS_LAMBDA_RUNTIME_API").map(|s| s.as_str()),
-        Some("host.docker.internal:9001")
+        Some("host.docker.internal:8001")
     );
     assert!(created
         .extra_hosts

@@ -1,25 +1,39 @@
-# Lambda@Home End-to-End Tests
+# Lambda@Home E2E Tests
 
-Professional Jest-based end-to-end test suite for Lambda@Home, providing comprehensive integration testing, performance benchmarking, and reliability validation.
+End-to-end test suite for Lambda@Home using Node.js 24's native test runner, providing comprehensive integration testing, performance benchmarking, and reliability validation.
 
 ## 🚀 Quick Start
 
-1. **Install Dependencies**:
-   ```bash
-   cd e2e
-   npm install
-   ```
+### Managed Mode (Recommended)
 
-2. **Start Lambda@Home Server**:
-   ```bash
-   # From project root
-   ./target/release/lambda-at-home-server &
-   ```
+The test framework automatically builds and starts the service for you:
 
-3. **Run Tests**:
-   ```bash
-   npm test
-   ```
+```bash
+cd e2e
+npm install
+npm test
+```
+
+The framework will:
+1. Build the service in release mode (`cargo build --release`)
+2. Start the Lambda@Home server
+3. Run all tests
+4. Clean up containers
+5. Stop the server
+
+### External Mode (For Development)
+
+If you want to run tests against an already-running service:
+
+```bash
+# Terminal 1: Start the service manually
+cargo run --release --bin lambda-at-home-server
+
+# Terminal 2: Run tests
+cd e2e
+npm install
+npm run test:external
+```
 
 ## 📁 Structure
 
@@ -47,9 +61,26 @@ e2e/
 
 ## 🧪 Running Tests
 
-### All Tests
+### Test Modes
+
+| Mode | Command | Description |
+|------|---------|-------------|
+| **Managed** | `npm test` | Builds and starts service automatically |
+| **External** | `npm run test:external` | Uses existing running service |
+| **Watch** | `npm run test:watch` | Watch mode (requires external service) |
+| **Coverage** | `npm run test:coverage` | With coverage reporting |
+
+### Individual Test Files
+
+With managed service (auto-build/start/stop):
 ```bash
-npm test
+node --test tests/integration/service.test.js
+```
+
+With external service:
+```bash
+export SKIP_SERVICE_START=1
+node --test tests/integration/service.test.js
 ```
 
 ### Specific Test Suites
@@ -57,23 +88,23 @@ npm test
 # Service tests
 npm run test:service
 
-# Metrics and performance tests
-npm run test:metrics
-
 # Runtime compatibility tests
 npm run test:runtimes
+
+# Performance tests
+npm run test:performance
 ```
 
-### Test Modes
+### Environment Variables
 ```bash
-# Watch mode (re-runs on file changes)
-npm run test:watch
-
-# Coverage report
-npm run test:coverage
-
-# Verbose output
+# Show verbose test output
 VERBOSE_TESTS=1 npm test
+
+# Show server logs during tests
+VERBOSE_SERVER=1 npm test
+
+# Skip service build/start (use external service)
+SKIP_SERVICE_START=1 npm test
 ```
 
 ## 📊 Test Coverage
@@ -187,4 +218,26 @@ When adding new tests:
 
 ---
 
-**Lambda@Home E2E Tests** - Professional end-to-end testing for your local Lambda environment! 🚀
+## 🎉 Node.js 24 Migration
+
+This test suite has been migrated from Jest to Node.js 24's native test runner, offering several benefits:
+
+### Benefits
+- **No external dependencies**: Jest and related packages removed (~285MB, 286 packages)
+- **Faster installation**: 9x faster npm install
+- **Better performance**: Native Node.js test execution
+- **Modern features**: Built-in test runner, assertions, and mocking
+- **Simpler stack**: One less tool to manage
+
+### Key Changes
+- `beforeAll` → `before`
+- `afterAll` → `after`
+- `expect(x).toBe(y)` → `assert.strictEqual(x, y)`
+- `expect(x).toEqual(y)` → `assert.deepStrictEqual(x, y)`
+- Custom matchers → Custom assertion functions
+
+See `MIGRATION_TO_NODE24.md` for detailed migration guide.
+
+---
+
+**Lambda@Home E2E Tests v0.2.0** - Professional end-to-end testing for your local Lambda environment! 🚀

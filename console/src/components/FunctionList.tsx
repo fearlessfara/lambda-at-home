@@ -1,15 +1,22 @@
 
 import { Link } from 'react-router-dom';
-import { Plus, Trash2, Play } from 'lucide-react';
+import { Plus, Trash2, Play, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { useFunctions, useDeleteFunction } from '../hooks/useFunctions';
 import { formatBytes, formatDate, getStateColor } from '../lib/utils';
 import { useToast } from './ui/use-toast';
+import { useState } from 'react';
 
 export function FunctionList() {
-  const { data: functionsData, isLoading, error } = useFunctions();
+  const [currentPage, setCurrentPage] = useState(0);
+  const [pageSize] = useState(20);
+  
+  const { data: functionsData, isLoading, error } = useFunctions({
+    marker: currentPage > 0 ? (currentPage * pageSize).toString() : undefined,
+    maxItems: pageSize,
+  });
   const deleteFunction = useDeleteFunction();
   const { toast } = useToast();
 
@@ -50,6 +57,22 @@ export function FunctionList() {
   }
 
   const functions = functionsData?.functions || [];
+  const totalCount = functionsData?.total_count || 0;
+  const hasNextPage = !!functionsData?.next_marker;
+  const hasPreviousPage = currentPage > 0;
+  const totalPages = Math.ceil(totalCount / pageSize);
+
+  const handleNextPage = () => {
+    if (hasNextPage) {
+      setCurrentPage(prev => prev + 1);
+    }
+  };
+
+  const handlePreviousPage = () => {
+    if (hasPreviousPage) {
+      setCurrentPage(prev => prev - 1);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -58,6 +81,11 @@ export function FunctionList() {
           <h1 className="text-3xl font-bold tracking-tight">Functions</h1>
           <p className="text-muted-foreground">
             Manage your Lambda@Home functions
+            {totalCount > 0 && (
+              <span className="ml-2 text-sm">
+                ({totalCount} total)
+              </span>
+            )}
           </p>
         </div>
         <Button asChild>
@@ -88,9 +116,16 @@ export function FunctionList() {
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle>Functions ({functions.length})</CardTitle>
+            <CardTitle>
+              Functions ({functions.length} of {totalCount})
+            </CardTitle>
             <CardDescription>
               A list of all your Lambda@Home functions
+              {totalPages > 1 && (
+                <span className="ml-2 text-sm">
+                  (Page {currentPage + 1} of {totalPages})
+                </span>
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -149,6 +184,35 @@ export function FunctionList() {
                 ))}
               </TableBody>
             </Table>
+            
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                <div className="text-sm text-muted-foreground">
+                  Showing {currentPage * pageSize + 1} to {Math.min((currentPage + 1) * pageSize, totalCount)} of {totalCount} functions
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePreviousPage}
+                    disabled={!hasPreviousPage}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleNextPage}
+                    disabled={!hasNextPage}
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

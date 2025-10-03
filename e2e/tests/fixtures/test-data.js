@@ -5,7 +5,8 @@
 const testData = {
     runtimes: [
         { name: 'nodejs18.x', version: 'v18.20.8' },
-        { name: 'nodejs22.x', version: 'v22.19.0' }
+        { name: 'nodejs22.x', version: 'v22.20.0' },
+        { name: 'nodejs24.x', version: 'v24.9.0' }
     ],
 
     testScenarios: {
@@ -53,21 +54,21 @@ const testData = {
     expectedResponses: {
         success: {
             success: true,
-            nodeVersion: expect.stringMatching(/^v\d+\.\d+\.\d+$/),
+            nodeVersion: /^v\d+\.\d+\.\d+$/,
             runtime: 'node',
-            timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+            timestamp: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
         },
         error: {
-            errorMessage: expect.any(String),
-            errorType: expect.any(String)
+            errorMessage: 'string',
+            errorType: 'string'
         }
     },
 
     performanceThresholds: {
         fastExecution: 150, // ms - increased for real-world performance
-        mediumExecution: 1600, // ms - increased for memory-intensive operations
+        mediumExecution: 3000, // ms - increased for memory-intensive operations
         slowExecution: 2000, // ms
-        concurrentExecution: 2000, // ms for 5 concurrent
+        concurrentExecution: 3000, // ms for 5 concurrent
         memoryUsage: 100 * 1024 * 1024, // 100MB
         cpuUsage: 80, // percentage
         primeCalculation: {

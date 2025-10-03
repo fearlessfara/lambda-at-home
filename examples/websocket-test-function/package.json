@@ -1,0 +1,9 @@
+{
+  "name": "websocket-test-function",
+  "version": "1.0.0",
+  "description": "Test function for WebSocket runtime",
+  "main": "index.js",
+  "dependencies": {
+    "ws": "^8.14.0"
+  }
+}

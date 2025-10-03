@@ -1,7 +1,14 @@
 ---
-description: Error taxonomy + HTTP mapping (Lambda parity)
-alwaysApply: true
+description: Error taxonomy, propagation, retryability, mapping to HTTP/CLI/UI, DX.
+globs:
+  - "crates/**/src/**/*.{rs,ts,tsx,js}"
+  - "runtimes/**/src/**/*.{rs,ts,tsx,js}"
+  - "console/**/*.{ts,tsx}"
+  - "apis/**"
+  - "docs/**/errors*.*"
+alwaysApply: false
 ---
+
 
 Types:
 - InitError, BadRequest, Throttled, Timeout, OOMKilled, Unhandled, Handled

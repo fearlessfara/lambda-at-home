@@ -2,53 +2,66 @@
  * Service Integration Tests
  */
 
+const { describe, test, before, after } = require('node:test');
+const assert = require('node:assert');
 const testData = require('../fixtures/test-data');
+const { cleanupSingleFunction } = require('../utils/test-helpers');
+const {
+    assertValidLambdaResponse,
+    assertWithinPerformanceThreshold,
+    assertSuccessfulInvocations,
+    assertMatchObject
+} = require('../utils/assertions');
+
+require('../setup');
 
 describe('Lambda@Home Service Integration Tests', () => {
     let testFunction;
 
-    beforeAll(async () => {
+    before(async () => {
         testFunction = await createTestFunction('service-test');
     });
 
-    afterAll(async () => {
-        await global.testManager.client.deleteFunction(testFunction.name);
-    });
+    after(cleanupSingleFunction(() => testFunction, global.testManager.client, {
+        timeout: 60000,
+        verifyCleanup: true,
+        forceRemoveContainers: true
+    }));
 
     describe('Health and Metrics Endpoints', () => {
         test('should have healthy server', async () => {
             const health = await global.testManager.client.healthCheck();
-            expect(health.healthy).toBe(true);
+            assert.strictEqual(health.healthy, true);
         });
 
         test('should provide metrics endpoint', async () => {
             const metrics = await global.testManager.client.getMetrics();
-            expect(metrics).toContain('lambda_cold_starts_total');
-            expect(metrics).toContain('lambda_duration_ms');
+            assert.ok(metrics.includes('lambda_cold_starts_total'));
+            assert.ok(metrics.includes('lambda_duration_ms'));
         });
     });
 
     describe('Function Management', () => {
         test('should create function successfully', () => {
-            expect(testFunction.name).toBeDefined();
-            expect(testFunction.data.function_name).toBe(testFunction.name);
-            expect(testFunction.data.state).toBe('Active');
+            assert.ok(testFunction.name);
+            assert.strictEqual(testFunction.data.function_name, testFunction.name);
+            assert.strictEqual(testFunction.data.state, 'Active');
         });
 
         test('should list functions', async () => {
             const functions = await global.testManager.client.listFunctions();
-            expect(functions.functions).toBeDefined();
-            expect(Array.isArray(functions.functions)).toBe(true);
-            
+            assert.ok(functions.functions);
+            assert.ok(Array.isArray(functions.functions));
+
             const ourFunction = functions.functions.find(f => f.function_name === testFunction.name);
-            expect(ourFunction).toBeDefined();
+            assert.ok(ourFunction);
         });
 
         test('should get function details', async () => {
             const functionData = await global.testManager.client.getFunction(testFunction.name);
-            expect(functionData.function_name).toBe(testFunction.name);
-            expect(functionData.runtime).toBe('nodejs22.x');
-            expect(functionData.handler).toBe('index.handler');
+            assert.strictEqual(functionData.function_name, testFunction.name);
+            assert.strictEqual(functionData.runtime, 'nodejs22.x');
+            assert.strictEqual(functionData.handler, 'index.handler');
         });
     });
 
@@ -61,10 +74,10 @@ describe('Lambda@Home Service Integration Tests', () => {
                 100
             );
 
-            expect(result).toBeValidLambdaResponse();
-            expect(result.testId).toBe('service-test');
-            expect(result.message).toBe('Hello from service test');
-            expect(result.waitMs).toBe(100);
+            assertValidLambdaResponse(result);
+            assert.strictEqual(result.testId, 'service-test');
+            assert.strictEqual(result.message, 'Hello from service test');
+            assert.strictEqual(result.waitMs, 100);
         });
 
         test('should handle different wait times', async () => {
@@ -82,13 +95,13 @@ describe('Lambda@Home Service Integration Tests', () => {
                     scenario.wait
                 );
 
-                expect(result).toBeValidLambdaResponse();
-                expect(result.waitMs).toBe(scenario.wait);
+                assertValidLambdaResponse(result);
+                assert.strictEqual(result.waitMs, scenario.wait);
             }
         });
 
         test('should handle concurrent invocations', async () => {
-            const payloadGenerator = (index) => 
+            const payloadGenerator = (index) =>
                 global.testManager.generateConcurrentPayload(
                     index,
                     'concurrent-test',
@@ -97,16 +110,16 @@ describe('Lambda@Home Service Integration Tests', () => {
                 );
 
             const results = await runConcurrentInvocations(testFunction.name, 3, payloadGenerator);
-            
-            expect(results).toHaveSuccessfulInvocations(3);
-            
+
+            assertSuccessfulInvocations(results, 3);
+
             // Check that all invocations completed within reasonable time
             const maxDuration = Math.max(...results.map(r => r.duration));
-            expect(maxDuration).toBeWithinPerformanceThreshold(testData.performanceThresholds.concurrentExecution);
+            assertWithinPerformanceThreshold(maxDuration, testData.performanceThresholds.concurrentExecution);
         });
 
         test('should handle sequential invocations', async () => {
-            const payloadGenerator = (index) => 
+            const payloadGenerator = (index) =>
                 global.testManager.generateSequentialPayload(
                     index,
                     'sequential-test',
@@ -115,21 +128,23 @@ describe('Lambda@Home Service Integration Tests', () => {
                 );
 
             const results = await runSequentialInvocations(testFunction.name, 5, payloadGenerator, 100);
-            
-            expect(results).toHaveLength(5);
-            
+
+            assert.strictEqual(results.length, 5);
+
             for (const result of results) {
-                expect(result.result).toBeValidLambdaResponse();
-                expect(result.duration).toBeWithinPerformanceThreshold(testData.performanceThresholds.mediumExecution);
+                assertValidLambdaResponse(result.result);
+                assertWithinPerformanceThreshold(result.duration, testData.performanceThresholds.mediumExecution);
             }
         });
     });
 
     describe('Error Handling', () => {
         test('should handle invalid function name', async () => {
-            await expect(
-                global.testManager.client.invokeFunction('non-existent-function', { test: 'data' })
-            ).rejects.toThrow();
+            await assert.rejects(
+                async () => {
+                    await global.testManager.client.invokeFunction('non-existent-function', { test: 'data' });
+                }
+            );
         });
 
         test('should handle malformed payload gracefully', async () => {
@@ -142,7 +157,7 @@ describe('Lambda@Home Service Integration Tests', () => {
                 { invalidField: undefined }
             );
 
-            expect(result).toBeValidLambdaResponse();
+            assertValidLambdaResponse(result);
         });
     });
 
@@ -169,11 +184,9 @@ describe('Lambda@Home Service Integration Tests', () => {
             const maxDuration = Math.max(...durations);
             const minDuration = Math.min(...durations);
 
-            expect(avgDuration).toBeWithinPerformanceThreshold(testData.performanceThresholds.fastExecution);
-            expect(maxDuration).toBeWithinPerformanceThreshold(testData.performanceThresholds.mediumExecution);
-            expect(minDuration).toBeGreaterThanOrEqual(0);
-
-            // Performance stats logged only in verbose mode
+            assertWithinPerformanceThreshold(avgDuration, testData.performanceThresholds.fastExecution);
+            assertWithinPerformanceThreshold(maxDuration, testData.performanceThresholds.mediumExecution);
+            assert.ok(minDuration >= 0);
         });
     });
 });

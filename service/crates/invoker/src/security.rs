@@ -99,7 +99,7 @@ pub fn validate_image_reference(image_ref: &str) -> Result<(), LambdaError> {
     Ok(())
 }
 
-pub fn sanitize_environment_variables(env_vars: &mut std::collections::HashMap<String, String>) {
+pub fn sanitize_environment_variables(env_vars: &mut std::collections::HashMap<String, String>, runtime_api_port: u16) {
     // Remove potentially dangerous environment variables
     let dangerous_vars = [
         "PATH",
@@ -111,16 +111,16 @@ pub fn sanitize_environment_variables(env_vars: &mut std::collections::HashMap<S
         "USER",
         "SHELL",
     ];
-    
+
     for var in &dangerous_vars {
         env_vars.remove(*var);
     }
-    
+
     // Ensure AWS_LAMBDA_* variables are properly set
     if !env_vars.contains_key("AWS_LAMBDA_RUNTIME_API") {
-        env_vars.insert("AWS_LAMBDA_RUNTIME_API".to_string(), "host.docker.internal:9001".to_string());
+        env_vars.insert("AWS_LAMBDA_RUNTIME_API".to_string(), format!("host.docker.internal:{}", runtime_api_port));
     }
-    
+
     if !env_vars.contains_key("TZ") {
         env_vars.insert("TZ".to_string(), "UTC".to_string());
     }

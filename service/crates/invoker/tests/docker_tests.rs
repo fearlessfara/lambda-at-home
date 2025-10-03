@@ -57,7 +57,7 @@ fn test_environment_variables() {
     env_vars.insert("CUSTOM_VAR".to_string(), "custom_value".to_string());
 
     let mut env = Vec::new();
-    env.push("AWS_LAMBDA_RUNTIME_API=host.docker.internal:9001".to_string());
+    env.push("AWS_LAMBDA_RUNTIME_API=host.docker.internal:8001".to_string());
     env.push(format!(
         "AWS_LAMBDA_FUNCTION_NAME={}",
         function.function_name
@@ -72,7 +72,7 @@ fn test_environment_variables() {
         env.push(format!("{key}={value}"));
     }
 
-    assert!(env.contains(&"AWS_LAMBDA_RUNTIME_API=host.docker.internal:9001".to_string()));
+    assert!(env.contains(&"AWS_LAMBDA_RUNTIME_API=host.docker.internal:8001".to_string()));
     assert!(env.contains(&"AWS_LAMBDA_FUNCTION_NAME=test-function".to_string()));
     assert!(env.contains(&"CUSTOM_VAR=custom_value".to_string()));
 }

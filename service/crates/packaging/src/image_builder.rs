@@ -19,6 +19,7 @@ fn get_embedded_bootstrap(function: &Function) -> Result<Vec<u8>, LambdaError> {
     let bootstrap_path = match function.runtime.as_str() {
         "nodejs18.x" => "nodejs18/bootstrap.js",
         "nodejs22.x" => "nodejs22/bootstrap.js",
+        "nodejs24.x" => "nodejs24/bootstrap.js",
         "python3.11" => "python311/bootstrap.py",
         _ => {
             return Err(LambdaError::InternalError {
@@ -30,6 +31,27 @@ fn get_embedded_bootstrap(function: &Function) -> Result<Vec<u8>, LambdaError> {
     RuntimeAssets::get(bootstrap_path)
         .ok_or_else(|| LambdaError::InternalError {
             reason: format!("Bootstrap file not found: {bootstrap_path}"),
+        })
+        .map(|file| file.data.into_owned())
+}
+
+/// Get embedded WebSocket bootstrap file content for a given runtime
+fn get_embedded_websocket_bootstrap(function: &Function) -> Result<Vec<u8>, LambdaError> {
+    let websocket_bootstrap_path = match function.runtime.as_str() {
+        "nodejs18.x" => "nodejs18/bootstrap-websocket.js",
+        "nodejs22.x" => "nodejs22/bootstrap-websocket.js",
+        "nodejs24.x" => "nodejs24/bootstrap-websocket.js",
+        "python3.11" => "python311/bootstrap-websocket.py",
+        _ => {
+            return Err(LambdaError::InternalError {
+                reason: format!("Unsupported runtime: {}", function.runtime),
+            })
+        }
+    };
+
+    RuntimeAssets::get(websocket_bootstrap_path)
+        .ok_or_else(|| LambdaError::InternalError {
+            reason: format!("WebSocket bootstrap file not found: {websocket_bootstrap_path}"),
         })
         .map(|file| file.data.into_owned())
 }
@@ -47,6 +69,7 @@ impl ImageBuilder {
         function: &Function,
         zip_info: &ZipInfo,
         image_ref: &str,
+        runtime_api_port: u16,
     ) -> Result<(), LambdaError> {
         // Create temporary directory for build context
         let temp_dir = tempfile::tempdir().map_err(|e| LambdaError::InternalError {
@@ -61,7 +84,7 @@ impl ImageBuilder {
             .extract_to_directory(&zip_info.zip_data, build_context)
             .await?;
 
-        // Copy embedded bootstrap script to build context
+        // Copy embedded bootstrap scripts to build context
         if let Ok(bootstrap_content) = get_embedded_bootstrap(function) {
             let bootstrap_filename = match function.runtime.as_str() {
                 "python3.11" => "bootstrap.py",
@@ -75,8 +98,22 @@ impl ImageBuilder {
             })?;
         }
 
+        // Copy embedded WebSocket bootstrap script to build context
+        if let Ok(websocket_bootstrap_content) = get_embedded_websocket_bootstrap(function) {
+            let websocket_bootstrap_filename = match function.runtime.as_str() {
+                "python3.11" => "bootstrap-websocket.py",
+                _ => "bootstrap-websocket.js",
+            };
+            let websocket_bootstrap_dest = build_context.join(websocket_bootstrap_filename);
+            std::fs::write(&websocket_bootstrap_dest, websocket_bootstrap_content).map_err(|e| {
+                LambdaError::InternalError {
+                    reason: e.to_string(),
+                }
+            })?;
+        }
+
         // Create Dockerfile based on runtime
-        let dockerfile_content = runtimes::dockerfile_for(function);
+        let dockerfile_content = runtimes::dockerfile_for(function, runtime_api_port);
         let dockerfile_path = build_context.join("Dockerfile");
         std::fs::write(&dockerfile_path, dockerfile_content).map_err(|e| {
             LambdaError::InternalError {

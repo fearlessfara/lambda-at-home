@@ -1,4 +1,5 @@
 use crate::handlers::*;
+use crate::websocket::websocket_handler;
 use axum::{
     routing::{get, post},
     Router,
@@ -16,5 +17,6 @@ pub fn build_router(state: crate::state::RtState) -> Router {
             "/2018-06-01/runtime/invocation/:request_id/error",
             post(runtime_error),
         )
+        .route("/2018-06-01/runtime/websocket", get(websocket_handler))
         .with_state(state)
 }

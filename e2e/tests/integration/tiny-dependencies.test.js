@@ -5,6 +5,18 @@
  * by the Lambda runtime environment.
  */
 
+const { describe, test, before, after } = require('node:test');
+const assert = require('node:assert');
+const {
+    assertValidLambdaResponse,
+    assertWithinPerformanceThreshold,
+    assertSuccessfulInvocations,
+    assertMatchObject
+} = require('../utils/assertions');
+const { cleanupSingleFunction, cleanupAfterAll, cleanupWithTempFiles } = require('../utils/test-helpers');
+
+require('../setup');
+
 const testData = require('../fixtures/test-data');
 const fs = require('fs');
 const path = require('path');
@@ -15,7 +27,7 @@ describe('Lambda@Home Tiny Dependencies Tests', () => {
     let tinyDepsTestZip = null;
     let tempZipPath = null;
 
-    beforeAll(async () => {
+    before(async () => {
         // Build the test function with dependencies from source
         const testFunctionPath = path.join(__dirname, '../../test-functions/deps-test');
         
@@ -60,7 +72,7 @@ describe('Lambda@Home Tiny Dependencies Tests', () => {
         }
     });
 
-    afterAll(async () => {
+    after(async () => {
         // Clean up temp ZIP file
         if (tempZipPath && fs.existsSync(tempZipPath)) {
             fs.unlinkSync(tempZipPath);
@@ -89,34 +101,36 @@ describe('Lambda@Home Tiny Dependencies Tests', () => {
                 {}
             );
 
-            expect(result).toBeValidLambdaResponse();
-            expect(result.success).toBe(true);
-            expect(result.uuid).toBeDefined();
-            expect(typeof result.uuid.generated).toBe('string');
-            expect(result.uuid.isValid).toBe(true);
-            expect(result.uuid.generated).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
-            expect(result.validation.uuidWorking).toBe(true);
+            assertValidLambdaResponse(result);
+            assert.strictEqual(result.success, true);
+            assert.ok(result.uuid !== undefined);
+            assert.strictEqual(typeof result.uuid.generated, 'string');
+            assert.strictEqual(result.uuid.isValid, true);
+            assert.match(result.uuid.generated, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+            assert.strictEqual(result.validation.uuidWorking, true);
         });
     });
 
     describe('Runtime Compatibility', () => {
-        test.each(testData.runtimes)('should work with $name runtime', async (runtime) => {
-            const testFunction = await createTinyDepsTestFunction(`tiny-deps-${runtime.name.replace('.', '-')}`, runtime.name);
-            testFunctions.push(testFunction);
+        for (const runtime of testData.runtimes) {
+            test(`should work with ${runtime.name} runtime`, async () => {
+                const testFunction = await createTinyDepsTestFunction(`tiny-deps-${runtime.name.replace('.', '-')}`, runtime.name);
+                testFunctions.push(testFunction);
 
-            const result = await invokeTinyDepsTestFunction(
-                testFunction.name,
-                `runtime-${runtime.name}`,
-                `Testing tiny dependencies with ${runtime.name}`,
-                {}
-            );
+                const result = await invokeTinyDepsTestFunction(
+                    testFunction.name,
+                    `runtime-${runtime.name}`,
+                    `Testing tiny dependencies with ${runtime.name}`,
+                    {}
+                );
 
-            expect(result).toBeValidLambdaResponse();
-            expect(result.success).toBe(true);
-            expect(result.nodeVersion).toBe(runtime.version);
-            expect(result.runtime).toBe('node');
-            expect(result.validation.allDependenciesLoaded).toBe(true);
-        });
+                assertValidLambdaResponse(result);
+                assert.strictEqual(result.success, true);
+                assert.strictEqual(result.nodeVersion, runtime.version);
+                assert.strictEqual(result.runtime, 'node');
+                assert.strictEqual(result.validation.allDependenciesLoaded, true);
+            });
+        }
     });
 
     describe('Performance with Dependencies', () => {
@@ -149,15 +163,15 @@ describe('Lambda@Home Tiny Dependencies Tests', () => {
 
             // All should succeed
             for (const result of results) {
-                expect(result.result).toBeValidLambdaResponse();
-                expect(result.result.success).toBe(true);
-                expect(result.result.validation.allDependenciesLoaded).toBe(true);
+                assertValidLambdaResponse(result.result);
+                assert.strictEqual(result.result.success, true);
+                assert.strictEqual(result.result.validation.allDependenciesLoaded, true);
             }
 
             // Performance should be reasonable
             const durations = results.map(r => r.duration);
             const avgDuration = durations.reduce((sum, d) => sum + d, 0) / durations.length;
-            expect(avgDuration).toBeLessThan(500); // 500ms threshold for tiny dependency-loaded functions
+            assert.ok(avgDuration < 500); // 500ms threshold for tiny dependency-loaded functions
         });
     });
 
@@ -177,13 +191,13 @@ describe('Lambda@Home Tiny Dependencies Tests', () => {
 
             const results = await runConcurrentInvocations(testFunction.name, concurrentCount, payloadGenerator);
             
-            expect(results).toHaveSuccessfulInvocations(concurrentCount);
+            assertSuccessfulInvocations(results, concurrentCount);
             
             // All results should have dependencies working
             for (const result of results) {
-                expect(result.result.success).toBe(true);
-                expect(result.result.validation.allDependenciesLoaded).toBe(true);
-                expect(result.result.validation.uuidWorking).toBe(true);
+                assert.strictEqual(result.result.success, true);
+                assert.strictEqual(result.result.validation.allDependenciesLoaded, true);
+                assert.strictEqual(result.result.validation.uuidWorking, true);
             }
         });
     });

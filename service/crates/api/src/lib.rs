@@ -11,7 +11,7 @@ pub use state::*;
 use axum::extract::DefaultBodyLimit;
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::IntoResponse;
-use axum::{routing::get, Router};
+use axum::Router;
 use lambda_control::ControlPlane;
 use lambda_invoker::Invoker;
 use lambda_metrics::MetricsService;
@@ -91,17 +91,8 @@ pub async fn start_server(
     let body_size_limit = (app_state.config.server.max_request_body_size_mb * 1024 * 1024) as usize;
 
     let app = Router::new()
-        .nest("/api", api)
-        // Serve embedded SPA at root with fallback
-        .route("/", get(|| async { embedded_file_response("") }))
-        .route(
-            "/*path",
-            get(
-                |axum::extract::Path(p): axum::extract::Path<String>| async move {
-                    embedded_file_response(&p)
-                },
-            ),
-        )
+        // AWS Lambda-compatible endpoints at root level
+        .merge(api)
         .layer(
             ServiceBuilder::new()
                 .layer(TraceLayer::new_for_http())
@@ -111,6 +102,40 @@ pub async fn start_server(
 
     let listener = tokio::net::TcpListener::bind(format!("{bind}:{port}")).await?;
     info!("User API server listening on {}:{}", bind, port);
+
+    axum::serve(listener, app).await?;
+    Ok(())
+}
+
+/// Start the console server that serves only the frontend
+pub async fn start_console_server(
+    bind: String,
+    port: u16,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use axum::{
+        routing::get,
+        Router,
+    };
+    use tower::ServiceBuilder;
+    use tower_http::{
+        cors::CorsLayer,
+        trace::TraceLayer,
+    };
+    use tracing::info;
+
+    let app = Router::new()
+        // Serve static files for the console
+        .route("/*path", get(|axum::extract::Path(p): axum::extract::Path<String>| async move {
+            embedded_file_response(&p)
+        }))
+        .layer(
+            ServiceBuilder::new()
+                .layer(TraceLayer::new_for_http())
+                .layer(CorsLayer::permissive()),
+        );
+
+    let listener = tokio::net::TcpListener::bind(format!("{bind}:{port}")).await?;
+    info!("Console server listening on {}:{}", bind, port);
 
     axum::serve(listener, app).await?;
     Ok(())

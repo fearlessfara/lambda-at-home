@@ -1,7 +1,10 @@
 ---
-description: Rust style & safety bars
-alwaysApply: true
+description: Rust style/architecture patterns (error handling, Result types, modules, async, lifetimes).
+globs:
+  - "**/*.rs"
+alwaysApply: false
 ---
+
 
 - Edition 2021; MSRV pinned.
 - `#![deny(warnings)]` in CI, `anyhow` at bin edges only; domain errors via `thiserror`.

@@ -2,26 +2,39 @@
  * Function Versioning and Management Tests
  */
 
+const { describe, test, before, after } = require('node:test');
+const assert = require('node:assert');
 const testData = require('../fixtures/test-data');
+const {
+    assertValidLambdaResponse,
+    assertWithinPerformanceThreshold,
+    assertSuccessfulInvocations,
+    assertMatchObject
+} = require('../utils/assertions');
+const { cleanupSingleFunction } = require('../utils/test-helpers');
+
+require('../setup');
 
 describe('Lambda@Home Function Versioning and Management Tests', () => {
     let testFunction;
 
-    beforeAll(async () => {
+    before(async () => {
         testFunction = await createTestFunction('versioning-test');
     });
 
-    afterAll(async () => {
-        await global.testManager.client.deleteFunction(testFunction.name);
-    });
+    after(cleanupSingleFunction(() => testFunction, global.testManager.client, {
+        timeout: 60000,
+        verifyCleanup: true,
+        forceRemoveContainers: true
+    }));
 
     describe('Function Versioning', () => {
         test('should create function with versioning enabled', async () => {
             const versionedFunction = await global.testManager.createTestFunction('versioned-test');
             
-            expect(versionedFunction.name).toBeDefined();
-            expect(versionedFunction.data.function_name).toBe(versionedFunction.name);
-            expect(versionedFunction.data.state).toBe('Active');
+            assert.ok(versionedFunction.name !== undefined);
+            assert.strictEqual(versionedFunction.data.function_name, versionedFunction.name);
+            assert.strictEqual(versionedFunction.data.state, 'Active');
 
             // Clean up
             await global.testManager.client.deleteFunction(versionedFunction.name);
@@ -38,8 +51,8 @@ describe('Lambda@Home Function Versioning and Management Tests', () => {
                 0
             );
 
-            expect(result).toBeValidLambdaResponse();
-            expect(result.testId).toBe('version-test');
+            assertValidLambdaResponse(result);
+            assert.strictEqual(result.testId, 'version-test');
 
             // Clean up
             await global.testManager.client.deleteFunction(updateFunction.name);
@@ -62,7 +75,7 @@ describe('Lambda@Home Function Versioning and Management Tests', () => {
 
             // All should succeed and maintain consistent behavior
             for (const result of results) {
-                expect(result).toBeValidLambdaResponse();
+                assertValidLambdaResponse(result);
             }
 
             // Clean up
@@ -91,7 +104,7 @@ describe('Lambda@Home Function Versioning and Management Tests', () => {
                     { config: config }
                 );
 
-                expect(result).toBeValidLambdaResponse();
+                assertValidLambdaResponse(result);
             }
 
             // Clean up
@@ -114,8 +127,8 @@ describe('Lambda@Home Function Versioning and Management Tests', () => {
 
             const result = await global.testManager.client.invokeFunction(envFunction.name, envPayload);
             
-            expect(result).toBeValidLambdaResponse();
-            expect(result.event).toMatchObject(envPayload);
+            assertValidLambdaResponse(result);
+            assertMatchObject(result.event, envPayload);
 
             // Clean up
             await global.testManager.client.deleteFunction(envFunction.name);
@@ -128,7 +141,7 @@ describe('Lambda@Home Function Versioning and Management Tests', () => {
             
             // Verify function exists
             const functionData = await global.testManager.client.getFunction(lifecycleFunction.name);
-            expect(functionData.function_name).toBe(lifecycleFunction.name);
+            assert.strictEqual(functionData.function_name, lifecycleFunction.name);
             
             // Test function works
             const result = await invokeTestFunction(
@@ -137,18 +150,18 @@ describe('Lambda@Home Function Versioning and Management Tests', () => {
                 'Lifecycle test',
                 0
             );
-            expect(result).toBeValidLambdaResponse();
+            assertValidLambdaResponse(result);
             
             // Delete function
             const deleteResult = await global.testManager.client.deleteFunction(lifecycleFunction.name);
-            expect(deleteResult.success).toBe(true);
+            assert.strictEqual(deleteResult.success, true);
             
             // Verify function no longer exists
             try {
                 await global.testManager.client.getFunction(lifecycleFunction.name);
-                expect(true).toBe(false); // Should not reach here
+                assert.strictEqual(true, false); // Should not reach here
             } catch (error) {
-                expect(error.message).toContain('404');
+                assert.ok(error.message.includes('404'));
             }
         });
 
@@ -162,7 +175,7 @@ describe('Lambda@Home Function Versioning and Management Tests', () => {
                 'Initial test',
                 0
             );
-            expect(initialResult).toBeValidLambdaResponse();
+            assertValidLambdaResponse(initialResult);
             
             // Simulate function update by invoking with different payload
             const updatedResult = await invokeTestFunction(
@@ -172,8 +185,8 @@ describe('Lambda@Home Function Versioning and Management Tests', () => {
                 0,
                 { updated: true, version: '2.0' }
             );
-            expect(updatedResult).toBeValidLambdaResponse();
-            expect(updatedResult.event.updated).toBe(true);
+            assertValidLambdaResponse(updatedResult);
+            assert.strictEqual(updatedResult.event.updated, true);
             
             // Clean up
             await global.testManager.client.deleteFunction(updateFunction.name);
@@ -187,12 +200,12 @@ describe('Lambda@Home Function Versioning and Management Tests', () => {
             // Get function details
             const functionData = await global.testManager.client.getFunction(metadataFunction.name);
             
-            expect(functionData.function_name).toBe(metadataFunction.name);
-            expect(functionData.runtime).toBe('nodejs22.x');
-            expect(functionData.handler).toBe('index.handler');
-            expect(functionData.state).toBe('Active');
-            expect(functionData.timeout).toBeDefined();
-            expect(functionData.memory_size).toBeDefined();
+            assert.strictEqual(functionData.function_name, metadataFunction.name);
+            assert.strictEqual(functionData.runtime, 'nodejs22.x');
+            assert.strictEqual(functionData.handler, 'index.handler');
+            assert.strictEqual(functionData.state, 'Active');
+            assert.ok(functionData.timeout !== undefined);
+            assert.ok(functionData.memory_size !== undefined);
             
             // Clean up
             await global.testManager.client.deleteFunction(metadataFunction.name);
@@ -204,13 +217,13 @@ describe('Lambda@Home Function Versioning and Management Tests', () => {
             // Get function list
             const functions = await global.testManager.client.listFunctions();
             
-            expect(functions.functions).toBeDefined();
-            expect(Array.isArray(functions.functions)).toBe(true);
+            assert.ok(functions.functions !== undefined);
+            assert.strictEqual(Array.isArray(functions.functions), true);
             
             // Our function should be in the list
             const ourFunction = functions.functions.find(f => f.function_name === listFunction.name);
-            expect(ourFunction).toBeDefined();
-            expect(ourFunction.function_name).toBe(listFunction.name);
+            assert.ok(ourFunction !== undefined);
+            assert.strictEqual(ourFunction.function_name, listFunction.name);
             
             // Clean up
             await global.testManager.client.deleteFunction(listFunction.name);
@@ -249,13 +262,13 @@ describe('Lambda@Home Function Versioning and Management Tests', () => {
             
             // All should succeed
             for (const result of results) {
-                expect(result.result).toBeValidLambdaResponse();
+                assertValidLambdaResponse(result.result);
             }
             
             // Performance should be consistent (excluding cold start)
             const durations = results.map(r => r.duration);
             const avgDuration = durations.reduce((sum, d) => sum + d, 0) / durations.length;
-            expect(avgDuration).toBeWithinPerformanceThreshold(testData.performanceThresholds.fastExecution);
+            assertWithinPerformanceThreshold(avgDuration, testData.performanceThresholds.fastExecution);
             
             // Clean up
             await global.testManager.client.deleteFunction(perfFunction.name);
@@ -277,11 +290,11 @@ describe('Lambda@Home Function Versioning and Management Tests', () => {
 
             const results = await runConcurrentInvocations(concurrentVersionFunction.name, concurrentCount, payloadGenerator);
             
-            expect(results).toHaveSuccessfulInvocations(concurrentCount);
+            assertSuccessfulInvocations(results, concurrentCount);
             
             // All should have consistent behavior
             for (const result of results) {
-                expect(result.result).toBeValidLambdaResponse();
+                assertValidLambdaResponse(result.result);
             }
             
             // Clean up
@@ -310,10 +323,10 @@ describe('Lambda@Home Function Versioning and Management Tests', () => {
                         scenario.data
                     );
 
-                    expect(result).toBeValidLambdaResponse();
+                    assertValidLambdaResponse(result);
                 } catch (error) {
                     // Some error scenarios might cause failures, which is acceptable
-                    expect(error.message).toBeDefined();
+                    assert.ok(error.message !== undefined);
                 }
             }
             
@@ -348,7 +361,7 @@ describe('Lambda@Home Function Versioning and Management Tests', () => {
 
             // At least some should succeed
             const successCount = results.filter(r => r.success).length;
-            expect(successCount).toBeGreaterThanOrEqual(1);
+            assert.ok(successCount >= 1);
             
             // Clean up
             await global.testManager.client.deleteFunction(recoveryFunction.name);

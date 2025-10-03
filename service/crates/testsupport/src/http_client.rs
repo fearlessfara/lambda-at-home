@@ -269,6 +269,7 @@ impl LambdaClient {
             }),
             log_result,
             headers: std::collections::HashMap::new(),
+            duration_ms: None, // Test client doesn't parse duration header
         })
     }
 }

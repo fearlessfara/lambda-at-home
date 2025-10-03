@@ -1,8 +1,15 @@
 ---
-description: Docker control & isolation policy (using bollard)
-globs: ["crates/invoker/**"]
+description: Docker-based invoker, container lifecycle, networking, isolation, compose images.
+globs:
+  - "crates/invoker/**"
+  - "crates/invoker*/**"
+  - "docker/**"
+  - "images/**"
+  - "compose*.y?(a)ml"
+  - "**/Dockerfile"
 alwaysApply: false
 ---
+
 
 - Create container args:
   - Image = built runtime image for (function, version)

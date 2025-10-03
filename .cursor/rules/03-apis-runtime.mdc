@@ -1,8 +1,15 @@
 ---
-description: In-container Runtime API (RIC) the handler talks to
-globs: ["crates/runtime_api/**", "runtimes/**"]
+description: Runtime/internal control plane APIs (invocation, scheduling, state, events).
+globs:
+  - "apis/runtime/**"
+  - "docs/apis/runtime/**"
+  - "openapi/runtime*.y?(a)ml"
+  - "openapi/*runtime*.json"
+  - "crates/**/src/**"
+  - "runtimes/**/src/**"
 alwaysApply: false
 ---
+
 
 Base (inside container): `http://${AWS_LAMBDA_RUNTIME_API}` (we map to host:port)
 

@@ -1,6 +1,7 @@
 use crate::autoscaler::Autoscaler;
 use crate::cache::FunctionCache;
 use crate::concurrency::ConcurrencyManager;
+use crate::container_monitor::ContainerMonitor;
 use crate::execution_tracker::ExecutionTracker;
 use crate::migrations;
 use crate::pending::Pending;
@@ -24,6 +25,8 @@ use uuid::Uuid;
 use crate::work_item::WorkItem;
 // No need for FnKey import - using function names directly
 use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::Mutex;
 use tracing::{debug, error, info, instrument};
 
 pub struct ControlPlane {
@@ -35,6 +38,7 @@ pub struct ControlPlane {
     config: lambda_models::Config,
     cache: Arc<FunctionCache>,
     execution_tracker: ExecutionTracker,
+    functions_being_deleted: Arc<Mutex<HashSet<String>>>,
 }
 
 impl ControlPlane {
@@ -75,6 +79,7 @@ impl ControlPlane {
             config: config.clone(),
             cache: cache.clone(),
             execution_tracker: execution_tracker.clone(),
+            functions_being_deleted: Arc::new(Mutex::new(HashSet::new())),
         });
         let autoscaler = Autoscaler::new(control_ref.clone());
         tokio::spawn(async move {
@@ -94,6 +99,19 @@ impl ControlPlane {
             }
         });
 
+        // Start container monitor for bidirectional state sync
+        let (container_monitor, event_sender) = ContainerMonitor::new(warm_pool.clone());
+
+        // Start Docker events monitoring
+        if let Err(e) = invoker.start_events_monitor_with_sender(event_sender).await {
+            error!("Failed to start Docker events monitor: {}", e);
+        }
+
+        // Start container monitor task
+        tokio::spawn(async move {
+            container_monitor.start().await;
+        });
+
         Ok(Self {
             pool,
             scheduler: Arc::new(scheduler),
@@ -103,6 +121,7 @@ impl ControlPlane {
             config,
             cache,
             execution_tracker,
+            functions_being_deleted: Arc::new(Mutex::new(HashSet::new())),
         })
     }
 
@@ -118,6 +137,29 @@ impl ControlPlane {
     }
     pub fn config(&self) -> lambda_models::Config {
         self.config.clone()
+    }
+
+    // Function deletion state management
+    pub fn mark_function_for_deletion(&self, function_name: &str) {
+        if let Ok(mut set) = self.functions_being_deleted.lock() {
+            set.insert(function_name.to_string());
+            info!("Marked function {} for deletion - new invocations will be rejected", function_name);
+        }
+    }
+
+    pub fn unmark_function_for_deletion(&self, function_name: &str) {
+        if let Ok(mut set) = self.functions_being_deleted.lock() {
+            set.remove(function_name);
+            info!("Unmarked function {} for deletion", function_name);
+        }
+    }
+
+    pub fn is_function_being_deleted(&self, function_name: &str) -> bool {
+        if let Ok(set) = self.functions_being_deleted.lock() {
+            set.contains(function_name)
+        } else {
+            false
+        }
     }
     pub fn queues(&self) -> Queues {
         self.scheduler.queues()
@@ -337,7 +379,8 @@ impl ControlPlane {
                 // Log warning but don't fail function creation
                 tracing::warn!(
                     "Failed to warm up container for function {}: {}",
-                    function.function_name, e
+                    function.function_name,
+                    e
                 );
             }
         }
@@ -372,6 +415,9 @@ impl ControlPlane {
 
     #[instrument(skip(self))]
     pub async fn delete_function(&self, name: &str) -> Result<(), LambdaError> {
+        // Mark function for deletion immediately to reject new invocations
+        self.mark_function_for_deletion(name);
+        
         // Get function first to get function_id for cache invalidation and image cleanup
         let function = self.get_function(name).await.ok();
 
@@ -387,17 +433,40 @@ impl ControlPlane {
             });
         }
 
-        // Clean up Docker image if function exists
+        // Clean up containers and Docker image if function exists
         if let Some(func) = &function {
+            // First, stop and remove all containers for this function
+            let container_ids = self.warm_pool.drain_by_function_id(func.function_id).await;
+            for container_id in container_ids {
+                // Try to stop the container first (best effort)
+                if let Err(e) = self.invoker.stop_container(&container_id).await {
+                    debug!("Failed to stop container {} (may already be stopped): {}", container_id, e);
+                }
+                
+                // Remove the container
+                if let Err(e) = self.invoker.remove_container(&container_id).await {
+                    debug!("Failed to remove container {} (may already be removed): {}", container_id, e);
+                } else {
+                    info!("Removed container: {}", container_id);
+                }
+            }
+
+            // Then remove the Docker image
             let image_ref = format!("lambda-home/{}:{}", func.function_name, func.code_sha256);
-            
+
             // Try to remove the Docker image (ignore errors if image doesn't exist)
             if let Err(e) = self.invoker.remove_image(&image_ref, false).await {
-                info!("Failed to remove Docker image {} (may not exist): {}", image_ref, e);
+                info!(
+                    "Failed to remove Docker image {} (may not exist): {}",
+                    image_ref, e
+                );
             } else {
                 info!("Removed Docker image: {}", image_ref);
             }
         }
+
+        // Note: Pending requests will naturally fail when containers are terminated
+        // TODO: Implement proper pending request cleanup by function ID
 
         // Invalidate cache
         self.cache.invalidate_function(name);
@@ -407,6 +476,9 @@ impl ControlPlane {
             self.cache
                 .invalidate_env_vars(&func.function_id.to_string());
         }
+
+        // Unmark function for deletion
+        self.unmark_function_for_deletion(name);
 
         info!("Deleted function: {}", name);
         Ok(())
@@ -423,11 +495,13 @@ impl ControlPlane {
             .collect();
 
         // Get all Lambda@Home Docker images
-        let all_lambda_images = self.invoker.list_lambda_images().await.map_err(|e| {
-            LambdaError::InternalError {
-                reason: format!("Failed to list Docker images: {}", e),
-            }
-        })?;
+        let all_lambda_images =
+            self.invoker
+                .list_lambda_images()
+                .await
+                .map_err(|e| LambdaError::InternalError {
+                    reason: format!("Failed to list Docker images: {e}"),
+                })?;
 
         // Find orphaned images (images not referenced by any function)
         let orphaned_images: Vec<String> = all_lambda_images
@@ -458,6 +532,13 @@ impl ControlPlane {
         let limit = max_items.unwrap_or(50).min(1000) as i64;
         let offset = marker.and_then(|m| m.parse::<i64>().ok()).unwrap_or(0);
 
+        // Get total count
+        let total_count_row = sqlx::query("SELECT COUNT(*) as count FROM functions")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(LambdaError::SqlxError)?;
+        let total_count: i64 = total_count_row.get("count");
+
         let rows = sqlx::query("SELECT * FROM functions ORDER BY function_name LIMIT ? OFFSET ?")
             .bind(limit)
             .bind(offset)
@@ -477,6 +558,7 @@ impl ControlPlane {
         Ok(ListFunctionsResponse {
             functions: functions?,
             next_marker,
+            total_count: Some(total_count as u32),
         })
     }
 
@@ -900,6 +982,13 @@ impl ControlPlane {
         // 1) Lookup function meta from Registry. If not found → 404.
         let function = self.get_function(&request.function_name).await?;
 
+        // 1.5) Check if function is being deleted - reject new invocations
+        if self.is_function_being_deleted(&request.function_name) {
+            return Err(LambdaError::FunctionNotFound {
+                function_name: request.function_name.clone(),
+            });
+        }
+
         // 2) Acquire concurrency token (RAII guard ensures release on any exit)
         let _token_guard = self.concurrency_manager.acquire_token(&function).await?;
 
@@ -941,7 +1030,7 @@ impl ControlPlane {
             // Build Docker image first
             let mut packaging_service =
                 lambda_packaging::PackagingService::new(self.config.clone());
-            packaging_service.build_image(&function, &image_ref).await?;
+            packaging_service.build_image(&function, &image_ref, self.config.server.port_runtime_api).await?;
 
             // Create container: generate instance id and inject as env
             let instance_id = uuid::Uuid::new_v4().to_string();
@@ -998,7 +1087,7 @@ impl ControlPlane {
                 );
                 let mut packaging_service =
                     lambda_packaging::PackagingService::new(self.config.clone());
-                packaging_service.build_image(&function, &image_ref).await?;
+                packaging_service.build_image(&function, &image_ref, self.config.server.port_runtime_api).await?;
 
                 let instance_id = uuid::Uuid::new_v4().to_string();
                 let mut env_vars = self.resolve_env_vars(&function).await?;
@@ -1040,6 +1129,10 @@ impl ControlPlane {
         let total = tokio::time::Duration::from_secs(function.timeout);
         match tokio::time::timeout(total, rx).await {
             Ok(Ok(result)) => {
+                // Calculate duration
+                let end_time = chrono::Utc::now();
+                let duration_ms = (end_time - start_time).num_milliseconds() as u64;
+                
                 // Success: build Lambda response
                 if result.ok {
                     Ok(InvokeResponse {
@@ -1052,6 +1145,7 @@ impl ControlPlane {
                         function_error: None,
                         log_result: result.log_tail_b64,
                         headers: std::collections::HashMap::new(),
+                        duration_ms: Some(duration_ms),
                     })
                 } else {
                     // Function error: return 200 with X-Amz-Function-Error header
@@ -1070,6 +1164,7 @@ impl ControlPlane {
                         }),
                         log_result: result.log_tail_b64,
                         headers: std::collections::HashMap::new(),
+                        duration_ms: Some(duration_ms),
                     })
                 }
             }
@@ -1079,6 +1174,7 @@ impl ControlPlane {
 
                 // Record init error in execution record (deferred async)
                 let end_time = chrono::Utc::now();
+                let duration_ms = (end_time - start_time).num_milliseconds() as u64;
                 self.execution_tracker
                     .record_execution_init_error(req_id.clone(), end_time);
 
@@ -1092,6 +1188,7 @@ impl ControlPlane {
                     function_error: Some(FunctionError::Unhandled),
                     log_result: None,
                     headers: std::collections::HashMap::new(),
+                    duration_ms: Some(duration_ms),
                 })
             }
             Err(_elapsed) => {
@@ -1108,6 +1205,7 @@ impl ControlPlane {
 
                 // Record timeout in execution record (deferred async)
                 let end_time = chrono::Utc::now();
+                let duration_ms = (end_time - start_time).num_milliseconds() as u64;
                 self.execution_tracker
                     .record_execution_timeout(req_id.clone(), end_time);
 
@@ -1118,6 +1216,7 @@ impl ControlPlane {
                     function_error: Some(FunctionError::Unhandled),
                     log_result: None,
                     headers: std::collections::HashMap::new(),
+                    duration_ms: Some(duration_ms),
                 })
             }
         }
@@ -1319,7 +1418,7 @@ impl ControlPlane {
     }
 
     fn is_valid_runtime(&self, runtime: &str) -> bool {
-        matches!(runtime, "nodejs18.x" | "nodejs22.x" | "python3.11" | "rust")
+        matches!(runtime, "nodejs18.x" | "nodejs22.x" | "nodejs24.x" | "python3.11" | "rust")
     }
 
     async fn function_exists(&self, name: &str) -> Result<bool, LambdaError> {
@@ -1759,14 +1858,15 @@ impl ControlPlane {
             );
 
             // Build Docker image first
-            let mut packaging_service = lambda_packaging::PackagingService::new(self.config.clone());
-            packaging_service.build_image(function, &image_ref).await?;
+            let mut packaging_service =
+                lambda_packaging::PackagingService::new(self.config.clone());
+            packaging_service.build_image(function, &image_ref, self.config.server.port_runtime_api).await?;
 
             // Create container: generate instance id and inject as env
             let instance_id = uuid::Uuid::new_v4().to_string();
             let mut env_vars = self.resolve_env_vars(function).await?;
             env_vars.insert("LAMBDAH_INSTANCE_ID".to_string(), instance_id.clone());
-            
+
             let container_id = self
                 .invoker
                 .create_container(function, &image_ref, env_vars)
@@ -1790,7 +1890,7 @@ impl ControlPlane {
                 last_used: std::time::Instant::now(),
                 state: crate::warm_pool::InstanceState::WarmIdle, // Ready for work
             };
-            
+
             self.warm_pool
                 .add_warm_container(fn_key, warm_container)
                 .await;
@@ -1809,7 +1909,8 @@ impl ControlPlane {
             Err(_) => {
                 tracing::warn!(
                     "Warm-up timeout for function {} after {}ms",
-                    function.function_name, self.config.warmup.timeout_ms
+                    function.function_name,
+                    self.config.warmup.timeout_ms
                 );
                 Err(LambdaError::InternalError {
                     reason: "Warm-up timeout".to_string(),
@@ -1819,21 +1920,24 @@ impl ControlPlane {
     }
 
     /// Compute environment hash for function key
-    async fn compute_env_hash(&self, environment: &std::collections::HashMap<String, String>) -> Result<String, LambdaError> {
+    async fn compute_env_hash(
+        &self,
+        environment: &std::collections::HashMap<String, String>,
+    ) -> Result<String, LambdaError> {
         // Create a deterministic hash of the environment variables
         let mut env_string = String::new();
         let mut keys: Vec<_> = environment.keys().collect();
         keys.sort(); // Ensure deterministic ordering
-        
+
         for key in keys {
             if let Some(value) = environment.get(key) {
-                env_string.push_str(&format!("{}={};", key, value));
+                env_string.push_str(&format!("{key}={value};"));
             }
         }
-        
+
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         env_string.hash(&mut hasher);
         Ok(format!("{:x}", hasher.finish()))
