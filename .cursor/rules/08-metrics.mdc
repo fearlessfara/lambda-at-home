@@ -1,7 +1,16 @@
 ---
-description: Observability (tracing + metrics)
-alwaysApply: true
+description: Observability (metrics, tracing, logs), naming, cardinality guards, exports.
+globs:
+  - "**/*metrics*.*"
+  - "**/*telemetry*.*"
+  - "**/*tracing*.*"
+  - "crates/**/src/**/*.{rs}"
+  - "runtimes/**/src/**/*.{rs}"
+  - "console/**/*.{ts,tsx}"
+  - "docs/**/observability*.*"
+alwaysApply: false
 ---
+
 
 - `tracing` JSON logs: ts, level, msg, function, version, req_id, container_id, duration_ms, billed_ms, mem_peak_mb
 - Prometheus:

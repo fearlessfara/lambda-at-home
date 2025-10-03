@@ -31,7 +31,7 @@ impl ContainerMonitor {
         // Also start a periodic sync to catch any missed events
         let warm_pool = self.warm_pool.clone();
         tokio::spawn(async move {
-            let mut interval = interval(Duration::from_secs(10)); // Check every 10 seconds
+            let mut interval = interval(Duration::from_secs(5)); // Check every 5 seconds
 
             loop {
                 interval.tick().await;

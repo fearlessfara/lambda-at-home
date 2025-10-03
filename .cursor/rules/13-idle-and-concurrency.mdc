@@ -1,9 +1,0 @@
----
-description: Idle timers, warm pool, and concurrency tokens
-alwaysApply: true
----
-
-- Per-function config: `reserved_concurrency`, `idle_soft_ms`, `idle_hard_ms`, `pool_min`, `pool_max`.
-- Acquire token → assign container (warm or cold) → release token when response posted.
-- Soft idle: `docker stop`; Hard idle: `docker rm`.
-- No reuse after Timeout/OOM/InitError.

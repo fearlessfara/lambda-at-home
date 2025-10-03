@@ -1,8 +1,19 @@
 ---
-description: ZIP ingest → image build pipeline
-globs: ["crates/packaging/**", "runtimes/**"]
+description: Build, packaging, CI/CD, artifacts, release flows (Rust, Node, images).
+globs:
+  - ".github/workflows/**"
+  - ".gitlab-ci.yml"
+  - ".gitlab/**"
+  - "Dockerfile"
+  - "Dockerfile.*"
+  - "crates/**/Cargo.toml"
+  - "runtimes/**/Cargo.toml"
+  - "package.json"
+  - "pnpm-workspace.yaml"
+  - "scripts/release/**"
 alwaysApply: false
 ---
+
 
 - Accept ZIP (up to configured size); compute SHA256; store in `data/blobs/`.
 - Choose base runtime by `Runtime` (e.g., nodejs18.x, python3.11, rust).

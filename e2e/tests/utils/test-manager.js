@@ -4,7 +4,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawn, execSync } = require('child_process');
 const TestClient = require('./test-client');
 const DockerUtils = require('./docker-utils');
 const CleanupManager = require('./cleanup-manager');
@@ -19,16 +18,9 @@ class TestManager {
             cleanupTimeoutMs: options.cleanupTimeoutMs || 60000,
             containerTracking: options.containerTracking !== false
         });
-        this.serverProcess = null;
-        this.managedServer = options.managedServer !== false;
     }
 
     async setup() {
-        // Build and start the service if managed
-        if (this.managedServer && !process.env.SKIP_SERVICE_START) {
-            await this.buildAndStartService();
-        }
-
         // Load test function zip
         const zipPath = path.join(__dirname, '../../test-function.zip');
         if (!fs.existsSync(zipPath)) {
@@ -40,58 +32,6 @@ class TestManager {
         await this.waitForServerHealth();
     }
 
-    async buildAndStartService() {
-        console.log('🔨 Building Lambda@Home service (release mode)...');
-        const projectRoot = path.join(__dirname, '../../../');
-
-        try {
-            // Build release version
-            execSync('cargo build --release', {
-                cwd: projectRoot,
-                stdio: 'inherit'
-            });
-            console.log('✅ Service built successfully');
-
-            // Start the service
-            console.log('🚀 Starting Lambda@Home service...');
-            const binaryPath = path.join(projectRoot, 'target/release/lambda-at-home-server');
-
-            this.serverProcess = spawn(binaryPath, [], {
-                cwd: projectRoot,
-                stdio: ['ignore', 'pipe', 'pipe'],
-                detached: false
-            });
-
-            // Capture server output
-            this.serverProcess.stdout.on('data', (data) => {
-                if (process.env.VERBOSE_SERVER) {
-                    console.log(`[SERVER] ${data.toString().trim()}`);
-                }
-            });
-
-            this.serverProcess.stderr.on('data', (data) => {
-                if (process.env.VERBOSE_SERVER) {
-                    console.error(`[SERVER ERROR] ${data.toString().trim()}`);
-                }
-            });
-
-            this.serverProcess.on('error', (error) => {
-                console.error('❌ Server process error:', error);
-            });
-
-            this.serverProcess.on('exit', (code, signal) => {
-                if (code !== 0 && code !== null) {
-                    console.error(`❌ Server exited with code ${code}`);
-                }
-            });
-
-            // Wait for server to be ready
-            await this.waitForServerHealth(30000);
-            console.log('✅ Service started successfully');
-        } catch (error) {
-            throw new Error(`Failed to build/start service: ${error.message}`);
-        }
-    }
 
     async waitForServerHealth(maxWaitMs = 10000) {
         const startTime = Date.now();
@@ -128,39 +68,9 @@ class TestManager {
         // Close HTTP connections
         this.client.close();
 
-        // Stop the managed server if we started it
-        if (this.serverProcess && this.managedServer) {
-            await this.stopService();
-        }
-
         return cleanupResult;
     }
 
-    async stopService() {
-        if (!this.serverProcess) {
-            return;
-        }
-
-        console.log('🛑 Stopping Lambda@Home service...');
-
-        return new Promise((resolve) => {
-            const timeout = setTimeout(() => {
-                console.log('⚠️ Service did not stop gracefully, forcing...');
-                this.serverProcess.kill('SIGKILL');
-                resolve();
-            }, 5000);
-
-            this.serverProcess.on('exit', () => {
-                clearTimeout(timeout);
-                console.log('✅ Service stopped');
-                this.serverProcess = null;
-                resolve();
-            });
-
-            // Send SIGTERM for graceful shutdown
-            this.serverProcess.kill('SIGTERM');
-        });
-    }
 
     async createTestFunction(name, runtime = 'nodejs22.x') {
         const functionName = `${name}-${Date.now()}`;

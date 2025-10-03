@@ -1,7 +1,15 @@
 ---
-description: AWS Lambda-compatible User API (HTTP) contract
-alwaysApply: true
+description: External/user-facing APIs (OpenAPI/REST/HTTP), semantics, versioning, docs.
+globs:
+  - "apis/user/**"
+  - "docs/apis/user/**"
+  - "openapi/**"
+  - "openapi/user*.y?(a)ml"
+  - "openapi/*user*.json"
+  - "console/**"
+alwaysApply: false
 ---
+
 
 Base: `/2015-03-31/`
 

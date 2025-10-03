@@ -1,7 +1,22 @@
 ---
-description: Standard repo/workspace layout for lambda@home
-alwaysApply: true
+description: Repo/workspace layout, folders, naming, and mono-repo conventions.
+globs:
+  - "README.md"
+  - "CONTRIBUTING.md"
+  - "docs/**"
+  - "tools/**"
+  - "scripts/**"
+  - "Makefile"
+  - "justfile"
+  - "pnpm-workspace.yaml"
+  - "package.json"
+  - "turbo.json"
+  - "Cargo.toml"
+  - "crates/**/Cargo.toml"
+  - "runtimes/**/Cargo.toml"
+alwaysApply: false
 ---
+
 
 # Workspace
 project/

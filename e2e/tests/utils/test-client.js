@@ -70,12 +70,8 @@ class TestClient {
     }
 
     async deleteFunction(functionName) {
-        try {
-            await this.client.delete(`/2015-03-31/functions/${functionName}`);
-            return { success: true };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
+        const response = await this.client.delete(`/2015-03-31/functions/${functionName}`);
+        return response.data;
     }
 
     async getMetrics() {

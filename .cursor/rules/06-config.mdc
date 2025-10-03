@@ -1,7 +1,17 @@
 ---
-description: Configuration & env for the local daemon
-alwaysApply: true
+description: Configuration surfaces (YAML/TOML/ENV), schema, precedence, defaults.
+globs:
+  - "config/**"
+  - "configs/**"
+  - "**/*.config.*"
+  - "**/*.conf"
+  - "**/*.toml"
+  - "**/*.yaml"
+  - "**/*.yml"
+  - "**/.env*"
+alwaysApply: false
 ---
+
 
 Config (figment/env → TOML):
 - server.bind = "127.0.0.1"

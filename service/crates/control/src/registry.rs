@@ -25,6 +25,8 @@ use uuid::Uuid;
 use crate::work_item::WorkItem;
 // No need for FnKey import - using function names directly
 use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::Mutex;
 use tracing::{debug, error, info, instrument};
 
 pub struct ControlPlane {
@@ -36,6 +38,7 @@ pub struct ControlPlane {
     config: lambda_models::Config,
     cache: Arc<FunctionCache>,
     execution_tracker: ExecutionTracker,
+    functions_being_deleted: Arc<Mutex<HashSet<String>>>,
 }
 
 impl ControlPlane {
@@ -76,6 +79,7 @@ impl ControlPlane {
             config: config.clone(),
             cache: cache.clone(),
             execution_tracker: execution_tracker.clone(),
+            functions_being_deleted: Arc::new(Mutex::new(HashSet::new())),
         });
         let autoscaler = Autoscaler::new(control_ref.clone());
         tokio::spawn(async move {
@@ -117,6 +121,7 @@ impl ControlPlane {
             config,
             cache,
             execution_tracker,
+            functions_being_deleted: Arc::new(Mutex::new(HashSet::new())),
         })
     }
 
@@ -132,6 +137,29 @@ impl ControlPlane {
     }
     pub fn config(&self) -> lambda_models::Config {
         self.config.clone()
+    }
+
+    // Function deletion state management
+    pub fn mark_function_for_deletion(&self, function_name: &str) {
+        if let Ok(mut set) = self.functions_being_deleted.lock() {
+            set.insert(function_name.to_string());
+            info!("Marked function {} for deletion - new invocations will be rejected", function_name);
+        }
+    }
+
+    pub fn unmark_function_for_deletion(&self, function_name: &str) {
+        if let Ok(mut set) = self.functions_being_deleted.lock() {
+            set.remove(function_name);
+            info!("Unmarked function {} for deletion", function_name);
+        }
+    }
+
+    pub fn is_function_being_deleted(&self, function_name: &str) -> bool {
+        if let Ok(set) = self.functions_being_deleted.lock() {
+            set.contains(function_name)
+        } else {
+            false
+        }
     }
     pub fn queues(&self) -> Queues {
         self.scheduler.queues()
@@ -387,6 +415,9 @@ impl ControlPlane {
 
     #[instrument(skip(self))]
     pub async fn delete_function(&self, name: &str) -> Result<(), LambdaError> {
+        // Mark function for deletion immediately to reject new invocations
+        self.mark_function_for_deletion(name);
+        
         // Get function first to get function_id for cache invalidation and image cleanup
         let function = self.get_function(name).await.ok();
 
@@ -434,6 +465,9 @@ impl ControlPlane {
             }
         }
 
+        // Note: Pending requests will naturally fail when containers are terminated
+        // TODO: Implement proper pending request cleanup by function ID
+
         // Invalidate cache
         self.cache.invalidate_function(name);
         if let Some(func) = function {
@@ -442,6 +476,9 @@ impl ControlPlane {
             self.cache
                 .invalidate_env_vars(&func.function_id.to_string());
         }
+
+        // Unmark function for deletion
+        self.unmark_function_for_deletion(name);
 
         info!("Deleted function: {}", name);
         Ok(())
@@ -944,6 +981,13 @@ impl ControlPlane {
     ) -> Result<InvokeResponse, LambdaError> {
         // 1) Lookup function meta from Registry. If not found → 404.
         let function = self.get_function(&request.function_name).await?;
+
+        // 1.5) Check if function is being deleted - reject new invocations
+        if self.is_function_being_deleted(&request.function_name) {
+            return Err(LambdaError::FunctionNotFound {
+                function_name: request.function_name.clone(),
+            });
+        }
 
         // 2) Acquire concurrency token (RAII guard ensures release on any exit)
         let _token_guard = self.concurrency_manager.acquire_token(&function).await?;
