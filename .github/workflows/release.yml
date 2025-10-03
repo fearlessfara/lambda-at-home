@@ -4,18 +4,28 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g., v0.3.0)"
+        required: false
+        type: string
 
 jobs:
   build-console:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
-      - name: Setup Node.js 24
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '22'
 
       - name: Cache npm
         uses: actions/cache@v4
@@ -42,6 +52,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       RUSTUP_TOOLCHAIN: 1.88.0
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     strategy:
       matrix:
         include:
@@ -60,6 +71,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Download console build
         uses: actions/download-artifact@v4
@@ -95,18 +108,18 @@ jobs:
           # Determine binary name and final filename based on OS
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             binary_name="lambda-at-home-server.exe"
-            final_name="lambda-at-home-server-${{ github.ref_name }}-${{ matrix.platform }}.exe"
+            final_name="lambda-at-home-server-${{ env.RELEASE_TAG }}-${{ matrix.platform }}.exe"
           else
             binary_name="lambda-at-home-server"
-            final_name="lambda-at-home-server-${{ github.ref_name }}-${{ matrix.platform }}"
+            final_name="lambda-at-home-server-${{ env.RELEASE_TAG }}-${{ matrix.platform }}"
           fi
           
-          # Check if binary exists (workspace root target directory)
-          binary_path="target/release/${binary_name}"
+          # Check if binary exists (built in service/ sub-crate)
+          binary_path="service/target/release/${binary_name}"
           if [[ ! -f "$binary_path" ]]; then
             echo "❌ Binary not found at: $binary_path"
-            echo "📁 Contents of target/release/:"
-            ls -la target/release/ || echo "Directory does not exist"
+            echo "📁 Contents of service/target/release/:"
+            ls -la service/target/release/ || echo "Directory does not exist"
             exit 1
           fi
           
@@ -133,9 +146,13 @@ jobs:
     permissions:
       contents: write
       packages: write
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -178,10 +195,10 @@ jobs:
           # Verify we have all expected binaries
           echo "🔍 Verifying expected binaries..."
           expected_binaries=(
-            "lambda-at-home-server-${{ github.ref_name }}-linux-x86_64"
-            "lambda-at-home-server-${{ github.ref_name }}-linux-arm64"
-            "lambda-at-home-server-${{ github.ref_name }}-macos-x86_64"
-            "lambda-at-home-server-${{ github.ref_name }}-macos-arm64"
+            "lambda-at-home-server-${{ env.RELEASE_TAG }}-linux-x86_64"
+            "lambda-at-home-server-${{ env.RELEASE_TAG }}-linux-arm64"
+            "lambda-at-home-server-${{ env.RELEASE_TAG }}-macos-x86_64"
+            "lambda-at-home-server-${{ env.RELEASE_TAG }}-macos-arm64"
           )
           
           missing_binaries=()
@@ -204,7 +221,7 @@ jobs:
           fi
 
           # Generate minimal release notes with inline checksums
-          TAG="${{ github.ref_name }}"
+          TAG="${{ env.RELEASE_TAG }}"
           cat > RELEASE_BODY.md << EOF
           ## Lambda@Home ${TAG}
 
@@ -263,12 +280,12 @@ EOF
       - name: Check if release exists
         id: check-release
         run: |
-          if gh release view ${{ github.ref_name }} > /dev/null 2>&1; then
+          if gh release view ${{ env.RELEASE_TAG }} > /dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Release ${{ github.ref_name }} already exists"
+            echo "Release ${{ env.RELEASE_TAG }} already exists"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Release ${{ github.ref_name }} does not exist"
+            echo "Release ${{ env.RELEASE_TAG }} does not exist"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -276,8 +293,8 @@ EOF
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: Lambda@Home ${{ github.ref_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Lambda@Home ${{ env.RELEASE_TAG }}
           generate_release_notes: false
           body_path: release-assets/RELEASE_BODY.md
           files: release-assets/*
