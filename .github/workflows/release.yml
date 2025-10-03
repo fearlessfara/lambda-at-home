@@ -4,155 +4,116 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Tag to release (e.g., v0.3.0)"
-        required: false
-        type: string
 
 jobs:
   build-console:
+    name: Build Frontend
     runs-on: ubuntu-latest
-    env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RELEASE_TAG }}
 
-      - name: Setup Node.js 22
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: console/package-lock.json
 
-      - name: Cache npm
-        uses: actions/cache@v4
-        with:
-          path: console/node_modules
-          key: npm-${{ hashFiles('console/package-lock.json') }}
-          restore-keys: npm-
-
-      - name: Build Console (shared across all platforms)
+      - name: Build console
         working-directory: console
         run: |
           npm ci
           npm run build
 
-      - name: Upload console build
+      - name: Upload console artifact
         uses: actions/upload-artifact@v4
         with:
-          name: console-build
+          name: console-dist
           path: console/dist/
           retention-days: 1
 
-  build:
+  build-binaries:
+    name: Build ${{ matrix.platform }}
     needs: build-console
     runs-on: ${{ matrix.os }}
-    env:
-      RUSTUP_TOOLCHAIN: 1.88.0
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
-            arch: x86_64
             platform: linux-x86_64
+            target: x86_64-unknown-linux-gnu
           - os: ubuntu-latest
-            arch: arm64
             platform: linux-arm64
+            target: aarch64-unknown-linux-gnu
           - os: macos-latest
-            arch: x86_64
             platform: macos-x86_64
-          - os: macos-latest
-            arch: arm64
+            target: x86_64-apple-darwin
+          - os: macos-13
             platform: macos-arm64
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RELEASE_TAG }}
+            target: aarch64-apple-darwin
 
-      - name: Download console build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download console artifact
         uses: actions/download-artifact@v4
         with:
-          name: console-build
+          name: console-dist
           path: console/dist/
 
-      - name: Install Rust (stable, pin to local)
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.88.0
-          components: rustfmt
+          toolchain: "1.88.0"
 
-      - name: Cache cargo
-        uses: actions/cache@v4
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-            service/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          workspaces: service
 
-      - name: Build release binary
-        run: cd service && cargo build --release --bin lambda-at-home-server
+      - name: Build binary
+        working-directory: service
+        run: cargo build --release --bin lambda-at-home-server
 
-      - name: Package binary
-        shell: bash
+      - name: Create release asset
         run: |
-          mkdir -p release-assets
+          mkdir -p dist
+          binary_path="service/target/release/lambda-at-home-server"
           
-          # Determine binary name and final filename based on OS
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            binary_name="lambda-at-home-server.exe"
-            final_name="lambda-at-home-server-${{ env.RELEASE_TAG }}-${{ matrix.platform }}.exe"
-          else
-            binary_name="lambda-at-home-server"
-            final_name="lambda-at-home-server-${{ env.RELEASE_TAG }}-${{ matrix.platform }}"
-          fi
-          
-          # Check if binary exists (built in service/ sub-crate)
-          binary_path="service/target/release/${binary_name}"
-          if [[ ! -f "$binary_path" ]]; then
-            echo "❌ Binary not found at: $binary_path"
-            echo "📁 Contents of service/target/release/:"
-            ls -la service/target/release/ || echo "Directory does not exist"
+          if [ ! -f "$binary_path" ]; then
+            echo "Error: Binary not found at $binary_path"
+            ls -la service/target/release/
             exit 1
           fi
           
-          # Copy binary with platform-specific naming
-          cp "$binary_path" "release-assets/${final_name}"
+          asset_name="lambda-at-home-server-${{ github.ref_name }}-${{ matrix.platform }}"
+          cp "$binary_path" "dist/$asset_name"
+          chmod +x "dist/$asset_name"
           
-          # Make executable (Unix only)
-          if [[ "${{ runner.os }}" != "Windows" ]]; then
-            chmod +x "release-assets/${final_name}"
-          fi
-          
-          echo "✅ Packaged ${{ runner.os }} ${{ matrix.arch }} binary: ${final_name}"
+          cd dist
+          sha256sum "$asset_name" > "$asset_name.sha256"
+          echo "Created: $asset_name"
+          cat "$asset_name.sha256"
 
-      - name: Upload build artifacts
+      - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
-          name: binary-${{ runner.os }}-${{ matrix.arch }}
-          path: release-assets/
+          name: binary-${{ matrix.platform }}
+          path: dist/*
           retention-days: 1
 
-  release:
-    needs: build
+  create-release:
+    name: Create GitHub Release
+    needs: build-binaries
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: write
-    env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RELEASE_TAG }}
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -163,142 +124,78 @@ jobs:
         run: |
           mkdir -p release-assets
           
-          echo "🔍 Debugging artifact structure:"
-          find artifacts/ -type f -name "*" | head -20
-          echo "---"
+          echo "Collecting binaries..."
+          find artifacts/binary-* -type f -exec cp {} release-assets/ \;
           
-          # Copy all binaries from artifacts
-          echo "📦 Copying binaries from artifacts..."
-          find artifacts/ -name "lambda-at-home-server-*" -exec cp {} release-assets/ \;
+          echo "Copying install scripts..."
+          cp install-lambda-at-home.sh release-assets/ || echo "install-lambda-at-home.sh not found"
+          cp setup.sh release-assets/ || echo "setup.sh not found"
+          cp INSTALL.md release-assets/ || echo "INSTALL.md not found"
           
-          # Copy install scripts and documentation
-          echo "📄 Copying documentation and scripts..."
-          cp install-lambda-at-home.sh release-assets/
-          cp setup.sh release-assets/
-          cp INSTALL.md release-assets/
-          
-          # Create checksums for binaries
-          echo "🔐 Creating checksums..."
-          cd release-assets
-          for file in lambda-at-home-server-*; do
-            if [[ -f "$file" ]]; then
-              sha256sum "$file" > "${file}.sha256"
-              echo "✅ Created checksum for $file"
-            fi
-          done
-          
-          echo "📦 Final release assets:"
-          ls -la
-          echo "---"
-          echo "📊 Asset count: $(ls -1 | wc -l) files"
-          
-          # Verify we have all expected binaries
-          echo "🔍 Verifying expected binaries..."
-          expected_binaries=(
-            "lambda-at-home-server-${{ env.RELEASE_TAG }}-linux-x86_64"
-            "lambda-at-home-server-${{ env.RELEASE_TAG }}-linux-arm64"
-            "lambda-at-home-server-${{ env.RELEASE_TAG }}-macos-x86_64"
-            "lambda-at-home-server-${{ env.RELEASE_TAG }}-macos-arm64"
-          )
-          
-          missing_binaries=()
-          for binary in "${expected_binaries[@]}"; do
-            if [[ ! -f "$binary" ]]; then
-              missing_binaries+=("$binary")
-            else
-              echo "✅ Found: $binary"
-            fi
-          done
-          
-          if [[ ${#missing_binaries[@]} -gt 0 ]]; then
-            echo "❌ Missing binaries:"
-            printf '%s\n' "${missing_binaries[@]}"
-            echo "Available files:"
-            ls -la lambda-at-home-server-*
-            exit 1
-          else
-            echo "✅ All expected binaries found!"
-          fi
+          echo "Release assets:"
+          ls -lah release-assets/
 
-          # Generate minimal release notes with inline checksums
-          TAG="${{ env.RELEASE_TAG }}"
-          cat > RELEASE_BODY.md << EOF
-          ## Lambda@Home ${TAG}
-
-### Quick Install
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/fearlessfara/lambda-at-home/main/install-lambda-at-home.sh | bash
-```
-
-### Manual Installation
-
-Linux x86_64:
-```bash
-wget https://github.com/fearlessfara/lambda-at-home/releases/download/${TAG}/lambda-at-home-server-${TAG}-linux-x86_64
-chmod +x lambda-at-home-server-${TAG}-linux-x86_64
-sudo mv lambda-at-home-server-${TAG}-linux-x86_64 /usr/local/bin/lambda-at-home-server
-```
-
-Linux ARM64:
-```bash
-wget https://github.com/fearlessfara/lambda-at-home/releases/download/${TAG}/lambda-at-home-server-${TAG}-linux-arm64
-chmod +x lambda-at-home-server-${TAG}-linux-arm64
-sudo mv lambda-at-home-server-${TAG}-linux-arm64 /usr/local/bin/lambda-at-home-server
-```
-
-macOS x86_64 (Intel):
-```bash
-curl -L -o lambda-at-home-server https://github.com/fearlessfara/lambda-at-home/releases/download/${TAG}/lambda-at-home-server-${TAG}-macos-x86_64
-chmod +x lambda-at-home-server
-sudo mv lambda-at-home-server /usr/local/bin/
-```
-
-macOS ARM64 (Apple Silicon):
-```bash
-curl -L -o lambda-at-home-server https://github.com/fearlessfara/lambda-at-home/releases/download/${TAG}/lambda-at-home-server-${TAG}-macos-arm64
-chmod +x lambda-at-home-server
-sudo mv lambda-at-home-server /usr/local/bin/
-```
-
-          ### Binaries + SHA-256
-EOF
-
-          # Append checksums inline for each binary
-          {
-            for f in lambda-at-home-server-*; do
-              [[ -f "$f" ]] || continue
-              sha_file="${f}.sha256"
-              if [[ -f "$sha_file" ]]; then
-                sha=$(sed 's/ .*//' "$sha_file")
-                printf -- "- %s (SHA-256: %s)\n" "$f" "$sha"
-              fi
-            done
-          } >> RELEASE_BODY.md
-          mv RELEASE_BODY.md release-assets/
-
-      - name: Check if release exists
-        id: check-release
+      - name: Generate release notes
         run: |
-          if gh release view ${{ env.RELEASE_TAG }} > /dev/null 2>&1; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Release ${{ env.RELEASE_TAG }} already exists"
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Release ${{ env.RELEASE_TAG }} does not exist"
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          cat > release-notes.md << 'EOF'
+          ## Lambda@Home ${{ github.ref_name }}
+          
+          ### Features
+          - Function deletion with graceful in-flight execution handling
+          - WebSocket Runtime API support
+          - Node.js 24 runtime support
+          - Enhanced testing and quality improvements
+          
+          ### Quick Install
+          
+          ```bash
+          curl -fsSL https://raw.githubusercontent.com/fearlessfara/lambda-at-home/main/install-lambda-at-home.sh | bash
+          ```
+          
+          ### Manual Installation
+          
+          Download the appropriate binary for your platform from the assets below, make it executable, and move it to your PATH:
+          
+          **Linux x86_64:**
+          ```bash
+          wget https://github.com/fearlessfara/lambda-at-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-linux-x86_64
+          chmod +x lambda-at-home-server-${{ github.ref_name }}-linux-x86_64
+          sudo mv lambda-at-home-server-${{ github.ref_name }}-linux-x86_64 /usr/local/bin/lambda-at-home-server
+          ```
+          
+          **Linux ARM64:**
+          ```bash
+          wget https://github.com/fearlessfara/lambda-at-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-linux-arm64
+          chmod +x lambda-at-home-server-${{ github.ref_name }}-linux-arm64
+          sudo mv lambda-at-home-server-${{ github.ref_name }}-linux-arm64 /usr/local/bin/lambda-at-home-server
+          ```
+          
+          **macOS x86_64 (Intel):**
+          ```bash
+          curl -L -o lambda-at-home-server https://github.com/fearlessfara/lambda-at-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-macos-x86_64
+          chmod +x lambda-at-home-server
+          sudo mv lambda-at-home-server /usr/local/bin/
+          ```
+          
+          **macOS ARM64 (Apple Silicon):**
+          ```bash
+          curl -L -o lambda-at-home-server https://github.com/fearlessfara/lambda-at-home/releases/download/${{ github.ref_name }}/lambda-at-home-server-${{ github.ref_name }}-macos-arm64
+          chmod +x lambda-at-home-server
+          sudo mv lambda-at-home-server /usr/local/bin/
+          ```
+          
+          ### Checksums
+          
+          SHA-256 checksums are provided as separate `.sha256` files for each binary.
+          EOF
 
-      - name: Create Release and Upload Assets
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: Lambda@Home ${{ env.RELEASE_TAG }}
-          generate_release_notes: false
-          body_path: release-assets/RELEASE_BODY.md
           files: release-assets/*
+          body_path: release-notes.md
           draft: false
           prerelease: false
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
