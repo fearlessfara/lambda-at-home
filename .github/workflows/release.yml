@@ -91,7 +91,7 @@ jobs:
       - name: Build binary (cross-compile)
         if: matrix.use_cross
         working-directory: service
-        run: cross build --release --target ${{ matrix.target }} --bin lambda-at-home-server
+        run: cross build --release --target ${{ matrix.target }} --bin lambda-at-home-server --features vendored
 
       - name: Create release asset
         run: |

@@ -90,6 +90,10 @@ tokio-test = "0.4"
 # Embedding
 rust-embed = "8.0"
 
+# OpenSSL (for vendored cross-compilation)
+openssl-sys = { version = "0.9", optional = true }
+
+
 [dev-dependencies]
 lambda-testsupport = { path = "crates/testsupport" }
 futures = "0.3"
@@ -101,3 +105,4 @@ tokio = { version = "1.0", features = ["test-util"] }
 [features]
 default = []
 docker_tests = []
+vendored = ["openssl-sys/vendored"]
