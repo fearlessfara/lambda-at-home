@@ -98,10 +98,25 @@ pub struct Invoker {
 
 impl Invoker {
     pub async fn new(config: AppConfig) -> Result<Self, LambdaError> {
-        let docker =
+        let docker = if let Ok(docker_host) = std::env::var("DOCKER_HOST") {
+            // Use DOCKER_HOST environment variable if available (for CI/Docker-in-Docker)
+            if docker_host.starts_with("tcp://") {
+                Docker::connect_with_http(&docker_host, 120, bollard::API_DEFAULT_VERSION)
+                    .map_err(|e| LambdaError::DockerError {
+                        message: format!("Failed to connect to Docker at {}: {}", docker_host, e),
+                    })?
+            } else {
+                // Fallback to socket connection
+                Docker::connect_with_socket_defaults().map_err(|e| LambdaError::DockerError {
+                    message: e.to_string(),
+                })?
+            }
+        } else {
+            // Default to Unix socket connection
             Docker::connect_with_socket_defaults().map_err(|e| LambdaError::DockerError {
                 message: e.to_string(),
-            })?;
+            })?
+        };
 
         Ok(Self {
             docker,
