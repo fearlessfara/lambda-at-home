@@ -81,11 +81,11 @@ jobs:
       - name: Create release asset
         run: |
           mkdir -p dist
-          binary_path="service/target/release/lambda-at-home-server"
+          binary_path="target/release/lambda-at-home-server"
           
           if [ ! -f "$binary_path" ]; then
             echo "Error: Binary not found at $binary_path"
-            ls -la service/target/release/
+            ls -la target/release/
             exit 1
           fi
           
