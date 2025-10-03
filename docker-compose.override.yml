@@ -1,0 +1,46 @@
+# Override file for development and custom configurations
+# Copy this file to docker-compose.override.yml and modify as needed
+
+services:
+  lambda-at-home:
+    # Override for development with live reloading
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile.dev
+    
+    # Override environment variables
+    environment:
+      - RUST_LOG=debug
+      - LAMBDA_AT_HOME_DATA_DIR=/app/data
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      # Custom configuration
+      - LAMBDA_AT_HOME_CONFIG_FILE=/app/config.toml
+    
+    # Override ports for development
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+      # Uncomment to expose additional ports for debugging
+      # - "9090:9090"  # Prometheus metrics
+    
+    # Additional volumes for development
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - lambda-at-home-data:/app/data
+      # Mount local config file
+      - ./service/configs/default.toml:/app/config.toml:ro
+      # Mount logs directory
+      - ./logs:/app/logs
+    
+    # Override command for development
+    # command: ["/app/start.sh", "--config", "/app/config.toml"]
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'

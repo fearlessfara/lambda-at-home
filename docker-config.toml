@@ -1,0 +1,31 @@
+# Example configuration file for Docker deployment
+# Copy this to config.toml and modify as needed
+
+[server]
+bind = "0.0.0.0"  # Listen on all interfaces in container
+port_user_api = 8000
+port_runtime_api = 8001
+max_request_body_size_mb = 50
+
+[data]
+dir = "/app/data"
+db_url = "sqlite:///app/data/lhome.db"
+
+[docker]
+host = "unix:///var/run/docker.sock"
+
+[defaults]
+memory_mb = 512
+timeout_ms = 3000
+tmp_mb = 512
+
+[idle]
+soft_ms = 45000   # stop container
+hard_ms = 300000  # rm container
+
+[limits]
+max_global_concurrency = 256
+
+[warmup]
+enabled = true
+timeout_ms = 30000

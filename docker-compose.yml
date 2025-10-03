@@ -1,0 +1,41 @@
+# Docker Compose configuration for Lambda@Home
+
+services:
+  lambda-at-home:
+    build: .
+    container_name: lambda-at-home
+    restart: unless-stopped
+    ports:
+      - "8000:8000"  # User API port
+      - "8001:8001"  # Runtime API port
+      - "9000:9000"  # Console port
+    volumes:
+      # Mount Docker socket to use host's Docker daemon
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Mount data directory for persistence
+      - lambda-at-home-data:/app/data
+      # Optional: Mount custom config file
+      # - ./config.toml:/app/config.toml:ro
+    environment:
+      - RUST_LOG=info
+      - LAMBDA_AT_HOME_DATA_DIR=/app/data
+      # Docker configuration
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    command: ["/app/lambda-at-home-server", "--bind", "0.0.0.0"]
+    networks:
+      - lambda-at-home-network
+    # Health check to ensure service is running
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/healtz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  lambda-at-home-data:
+    driver: local
+
+networks:
+  lambda-at-home-network:
+    driver: bridge
