@@ -103,7 +103,7 @@ impl Invoker {
             if docker_host.starts_with("tcp://") {
                 Docker::connect_with_http(&docker_host, 120, bollard::API_DEFAULT_VERSION)
                     .map_err(|e| LambdaError::DockerError {
-                        message: format!("Failed to connect to Docker at {}: {}", docker_host, e),
+                        message: format!("Failed to connect to Docker at {docker_host}: {e}"),
                     })?
             } else {
                 // Fallback to socket connection
