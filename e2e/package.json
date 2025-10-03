@@ -1,6 +1,6 @@
 {
   "name": "lambda-at-home-e2e-tests",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "End-to-end test suite for Lambda@Home using Node.js native test runner",
   "main": "tests/setup.js",
   "scripts": {
