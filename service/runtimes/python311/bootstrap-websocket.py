@@ -10,7 +10,7 @@ import websockets
 import signal
 from typing import Optional, Dict, Any
 
-RUNTIME_API = os.environ.get('AWS_LAMBDA_RUNTIME_API', 'localhost:9001')
+RUNTIME_API = os.environ.get('AWS_LAMBDA_RUNTIME_API', 'localhost:8001')
 FUNCTION_NAME = os.environ.get('AWS_LAMBDA_FUNCTION_NAME')
 FUNCTION_VERSION = os.environ.get('AWS_LAMBDA_FUNCTION_VERSION', '1')
 MEMORY_SIZE = os.environ.get('AWS_LAMBDA_FUNCTION_MEMORY_SIZE')

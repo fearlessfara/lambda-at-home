@@ -12,7 +12,7 @@ struct Cli {
     #[command(subcommand)]
     command: Commands,
 
-    #[arg(long, default_value = "http://localhost:9000")]
+    #[arg(long, default_value = "http://localhost:8000")]
     endpoint: String,
 }
 

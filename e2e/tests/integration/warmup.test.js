@@ -2,6 +2,8 @@
  * Warm-up functionality tests
  */
 
+const { describe, test, before, after } = require('node:test');
+const assert = require('node:assert');
 const TestClient = require('../utils/test-client');
 const fs = require('fs');
 const path = require('path');
@@ -10,12 +12,12 @@ describe('Warm-up Tests', () => {
     let client;
     let testFunctionName;
 
-    beforeAll(async () => {
+    before(async () => {
         client = new TestClient();
         testFunctionName = `warmup-test-${Date.now()}`;
     });
 
-    afterAll(async () => {
+    after(async () => {
         if (client) {
             try {
                 await client.deleteFunction(testFunctionName);
@@ -42,8 +44,8 @@ describe('Warm-up Tests', () => {
         );
         const creationTime = Date.now() - startTime;
 
-        expect(functionData.function_name).toBe(testFunctionName);
-        expect(functionData.state).toBe('Active');
+        assert.strictEqual(functionData.function_name, testFunctionName);
+        assert.strictEqual(functionData.state, 'Active');
 
         // Wait a bit for warm-up to complete (if it doesn't timeout)
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -54,8 +56,8 @@ describe('Warm-up Tests', () => {
         console.log('Function creation time:', creationTime, 'ms');
 
         // The warm-up might timeout, but the function should still be created successfully
-        expect(warmPoolStatus).toBeDefined();
-        expect(warmPoolStatus.total).toBeGreaterThanOrEqual(0);
+        assert.ok(warmPoolStatus !== undefined);
+        assert.ok(warmPoolStatus.total >= 0);
     }, 60000); // 60 second timeout
 
     test('should have faster cold start on first invocation after warm-up', async () => {
@@ -64,7 +66,7 @@ describe('Warm-up Tests', () => {
         const zipData = fs.readFileSync(zipPath, 'base64');
 
         const functionName = `warmup-coldstart-${Date.now()}`;
-        
+
         try {
             // Create function
             await client.createFunction(
@@ -85,8 +87,8 @@ describe('Warm-up Tests', () => {
             console.log('First invocation time:', invocationTime, 'ms');
             console.log('Response:', response);
 
-            expect(response).toBeDefined();
-            expect(invocationTime).toBeLessThan(30000); // Should complete within 30 seconds
+            assert.ok(response !== undefined);
+            assert.ok(invocationTime < 30000); // Should complete within 30 seconds
 
         } finally {
             try {

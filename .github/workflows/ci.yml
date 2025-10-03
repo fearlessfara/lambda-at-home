@@ -7,8 +7,8 @@ on:
     branches: [ main, master ]
 
 jobs:
-  unit-tests:
-    name: Unit Tests
+  lint-and-unit-tests:
+    name: Lint and Unit Tests
     runs-on: ubuntu-latest
     env:
       RUSTUP_TOOLCHAIN: 1.88.0
@@ -16,10 +16,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Cache npm (console)
         uses: actions/cache@v4
@@ -27,6 +27,64 @@ jobs:
           path: console/node_modules
           key: ${{ runner.os }}-npm-${{ hashFiles('console/package-lock.json') }}
           restore-keys: ${{ runner.os }}-npm-
+
+      - name: Build Web Console assets (for Rust embed)
+        working-directory: console
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install Rust (stable, pin to local)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+            service/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Run clippy (Rust linter)
+        run: cargo clippy --workspace -- -D warnings
+
+      - name: Run Rust unit tests
+        run: cargo test --workspace
+
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-unit-tests
+    env:
+      RUSTUP_TOOLCHAIN: 1.88.0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Cache npm (console)
+        uses: actions/cache@v4
+        with:
+          path: console/node_modules
+          key: ${{ runner.os }}-npm-console-${{ hashFiles('console/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-npm-console-
+
+      - name: Cache npm (e2e)
+        uses: actions/cache@v4
+        with:
+          path: e2e/node_modules
+          key: ${{ runner.os }}-npm-e2e-${{ hashFiles('e2e/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-npm-e2e-
 
       - name: Build Web Console assets (for Rust embed)
         working-directory: console
@@ -51,5 +109,10 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
-      - name: Unit tests (workspace libs)
-        run: cd service && cargo test --workspace --lib
+      - name: Install e2e test dependencies
+        working-directory: e2e
+        run: npm ci
+
+      - name: Run E2E tests (managed mode)
+        working-directory: e2e
+        run: npm test

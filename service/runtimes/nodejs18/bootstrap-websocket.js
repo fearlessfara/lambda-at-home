@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Runtime API configuration (supports values with or without scheme)
-const RAW_RUNTIME_API = process.env.AWS_LAMBDA_RUNTIME_API || 'host.docker.internal:9001';
+const RAW_RUNTIME_API = process.env.AWS_LAMBDA_RUNTIME_API || 'host.docker.internal:8001';
 function parseRuntimeApiHostPort(raw) {
   try {
     // Ensure URL has a scheme for URL parsing

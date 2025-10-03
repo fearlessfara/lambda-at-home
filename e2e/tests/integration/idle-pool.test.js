@@ -2,18 +2,32 @@
  * Idle Pool and Container Lifecycle Tests
  */
 
+const { describe, test, before, after } = require('node:test');
+const assert = require('node:assert');
+const {
+    assertValidLambdaResponse,
+    assertWithinPerformanceThreshold,
+    assertSuccessfulInvocations,
+    assertMatchObject
+} = require('../utils/assertions');
+const { cleanupSingleFunction, cleanupAfterAll, cleanupWithTempFiles } = require('../utils/test-helpers');
+
+require('../setup');
+
 const testData = require('../fixtures/test-data');
 
 describe('Lambda@Home Idle Pool and Container Lifecycle Tests', () => {
     let testFunction;
 
-    beforeAll(async () => {
+    before(async () => {
         testFunction = await createTestFunction('idle-pool-test');
     });
 
-    afterAll(async () => {
-        await global.testManager.client.deleteFunction(testFunction.name);
-    });
+    after(cleanupSingleFunction(() => testFunction, global.testManager.client, {
+        timeout: 60000,
+        verifyCleanup: true,
+        forceRemoveContainers: true
+    }));
 
     describe('Container Lifecycle Management', () => {
         test('should handle cold start vs warm start performance', async () => {
@@ -27,8 +41,8 @@ describe('Lambda@Home Idle Pool and Container Lifecycle Tests', () => {
                 )
             );
 
-            expect(coldStartResult.result).toBeValidLambdaResponse();
-            expect(coldStartResult.duration).toBeGreaterThan(0);
+            assertValidLambdaResponse(coldStartResult.result);
+            assert.ok(coldStartResult.duration > 0);
 
             // Second invocation within short time - should reuse warm container
             const warmStartResult = await measureInvocation(
@@ -40,8 +54,8 @@ describe('Lambda@Home Idle Pool and Container Lifecycle Tests', () => {
                 )
             );
 
-            expect(warmStartResult.result).toBeValidLambdaResponse();
-            expect(warmStartResult.duration).toBeGreaterThan(0);
+            assertValidLambdaResponse(warmStartResult.result);
+            assert.ok(warmStartResult.duration > 0);
 
             // Warm start should generally be faster than cold start
             // Note: This might not always be true due to system variability
@@ -60,12 +74,12 @@ describe('Lambda@Home Idle Pool and Container Lifecycle Tests', () => {
 
             const results = await runConcurrentInvocations(testFunction.name, invocationCount, payloadGenerator);
             
-            expect(results).toHaveSuccessfulInvocations(invocationCount);
+            assertSuccessfulInvocations(results, invocationCount);
             
             // All invocations should complete successfully
             for (const result of results) {
-                expect(result.result).toBeValidLambdaResponse();
-                expect(result.duration).toBeGreaterThan(0);
+                assertValidLambdaResponse(result.result);
+                assert.ok(result.duration > 0);
             }
         });
     });
@@ -87,11 +101,11 @@ describe('Lambda@Home Idle Pool and Container Lifecycle Tests', () => {
                 results.push(result);
             }
 
-            expect(results).toHaveLength(sequentialCount);
+            assert.strictEqual(results.length, sequentialCount);
             
             // All should succeed
             for (const result of results) {
-                expect(result.result).toBeValidLambdaResponse();
+                assertValidLambdaResponse(result.result);
             }
         });
 
@@ -106,7 +120,7 @@ describe('Lambda@Home Idle Pool and Container Lifecycle Tests', () => {
                 )
             );
 
-            expect(initialResult.result).toBeValidLambdaResponse();
+            assertValidLambdaResponse(initialResult.result);
 
             // Wait for potential container cleanup (this is system-dependent)
             await new Promise(resolve => setTimeout(resolve, 2000));
@@ -121,7 +135,7 @@ describe('Lambda@Home Idle Pool and Container Lifecycle Tests', () => {
                 )
             );
 
-            expect(afterWaitResult.result).toBeValidLambdaResponse();
+            assertValidLambdaResponse(afterWaitResult.result);
         });
     });
 
@@ -143,7 +157,7 @@ describe('Lambda@Home Idle Pool and Container Lifecycle Tests', () => {
 
             // All should succeed despite memory pressure
             for (const result of results) {
-                expect(result.result).toBeValidLambdaResponse();
+                assertValidLambdaResponse(result.result);
             }
         });
 
@@ -172,11 +186,11 @@ describe('Lambda@Home Idle Pool and Container Lifecycle Tests', () => {
 
                 const results = await runConcurrentInvocations(testFunction.name, requestsPerRound, payloadGenerator);
                 
-                expect(results).toHaveSuccessfulInvocations(requestsPerRound);
+                assertSuccessfulInvocations(results, requestsPerRound);
                 
                 // Performance should remain consistent
                 const avgDuration = results.reduce((sum, r) => sum + r.duration, 0) / results.length;
-                expect(avgDuration).toBeWithinPerformanceThreshold(testData.performanceThresholds.fastExecution);
+                assertWithinPerformanceThreshold(avgDuration, testData.performanceThresholds.fastExecution);
             }
         });
     });
@@ -202,8 +216,8 @@ describe('Lambda@Home Idle Pool and Container Lifecycle Tests', () => {
                     )
                 );
 
-                expect(result.result).toBeValidLambdaResponse();
-                expect(result.result.event).toMatchObject(testPayloads[i]);
+                assertValidLambdaResponse(result.result);
+                assertMatchObject(result.result.event, testPayloads[i]);
             }
         });
 
@@ -224,7 +238,7 @@ describe('Lambda@Home Idle Pool and Container Lifecycle Tests', () => {
             
             // Should either succeed or fail gracefully
             if (result.result) {
-                expect(result.result).toBeValidLambdaResponse();
+                assertValidLambdaResponse(result.result);
             }
         });
     });

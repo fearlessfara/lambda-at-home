@@ -212,8 +212,9 @@ impl Invoker {
         let container_name = format!("lambda-{}-{}", function.function_name, uuid::Uuid::new_v4());
 
         // Build environment variables
+        let runtime_api = format!("host.docker.internal:{}", self.config.server.port_runtime_api);
         let mut env = vec![
-            "AWS_LAMBDA_RUNTIME_API=host.docker.internal:9001".to_string(),
+            format!("AWS_LAMBDA_RUNTIME_API={}", runtime_api),
             "AWS_LAMBDA_FUNCTION_NAME=".to_string() + &function.function_name,
             "AWS_LAMBDA_FUNCTION_VERSION=".to_string() + &function.version,
             "AWS_LAMBDA_FUNCTION_MEMORY_SIZE=".to_string() + &function.memory_size.to_string(),

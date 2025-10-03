@@ -80,8 +80,9 @@ impl Autoscaler {
             "lambda-home/{}:{}",
             function.function_name, function.code_sha256
         );
-        let mut packaging = lambda_packaging::PackagingService::new(self.control.config());
-        packaging.build_image(&function, &image_ref).await?;
+        let config = self.control.config();
+        let mut packaging = lambda_packaging::PackagingService::new(config.clone());
+        packaging.build_image(&function, &image_ref, config.server.port_runtime_api).await?;
 
         let instance_id = uuid::Uuid::new_v4().to_string();
         let mut env_vars = function.environment.clone();

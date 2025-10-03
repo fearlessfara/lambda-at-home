@@ -2,18 +2,31 @@
  * Concurrency and Throttling Tests
  */
 
+const { describe, test, before, after } = require('node:test');
+const assert = require('node:assert');
 const testData = require('../fixtures/test-data');
+const { cleanupSingleFunction } = require('../utils/test-helpers');
+const {
+    assertValidLambdaResponse,
+    assertWithinPerformanceThreshold,
+    assertSuccessfulInvocations,
+    assertMatchObject
+} = require('../utils/assertions');
+
+require('../setup');
 
 describe('Lambda@Home Concurrency and Throttling Tests', () => {
     let testFunction;
 
-    beforeAll(async () => {
+    before(async () => {
         testFunction = await createTestFunction('concurrency-test');
     });
 
-    afterAll(async () => {
-        await global.testManager.client.deleteFunction(testFunction.name);
-    });
+    after(cleanupSingleFunction(() => testFunction, global.testManager.client, {
+        timeout: 60000,
+        verifyCleanup: true,
+        forceRemoveContainers: true
+    }));
 
     describe('Basic Concurrency', () => {
         test('should handle concurrent invocations efficiently', async () => {
@@ -32,11 +45,11 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
                 const results = await runConcurrentInvocations(testFunction.name, level, payloadGenerator);
                 const totalTime = Date.now() - startTime;
 
-                expect(results).toHaveSuccessfulInvocations(level);
-                
+                assertSuccessfulInvocations(results, level);
+
                 // Concurrent execution should be faster than sequential
                 const maxDuration = Math.max(...results.map(r => r.duration));
-                expect(totalTime).toBeLessThan(maxDuration * level);
+                assert.ok(totalTime < maxDuration * level);
             }
         });
 
@@ -51,12 +64,12 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
                 );
 
             const results = await runConcurrentInvocations(testFunction.name, concurrentCount, payloadGenerator);
-            
-            expect(results).toHaveSuccessfulInvocations(concurrentCount);
-            
+
+            assertSuccessfulInvocations(results, concurrentCount);
+
             // All should complete within reasonable time
             for (const result of results) {
-                expect(result.duration).toBeWithinPerformanceThreshold(testData.performanceThresholds.mediumExecution);
+                assertWithinPerformanceThreshold(result.duration, testData.performanceThresholds.mediumExecution);
             }
         });
     });
@@ -82,11 +95,11 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
                 const throughput = level / (totalTime / 1000); // requests per second
                 throughputResults.push({ level, throughput, totalTime });
 
-                expect(results).toHaveSuccessfulInvocations(level);
+                assertSuccessfulInvocations(results, level);
             }
 
             // Throughput should generally increase with concurrency (up to a point)
-            expect(throughputResults.length).toBe(loadLevels.length);
+            assert.strictEqual(throughputResults.length, loadLevels.length);
         });
 
         test('should handle burst traffic patterns', async () => {
@@ -103,8 +116,8 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
                     );
 
                 const results = await runConcurrentInvocations(testFunction.name, burstSize, payloadGenerator);
-                
-                expect(results).toHaveSuccessfulInvocations(burstSize);
+
+                assertSuccessfulInvocations(results, burstSize);
                 
                 // Wait between bursts
                 await new Promise(resolve => setTimeout(resolve, 500));
@@ -132,10 +145,10 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
             }
 
             const finalResults = await Promise.all(results);
-            
+
             // At least some should succeed
             const successCount = finalResults.filter(r => r.result && !r.error).length;
-            expect(successCount).toBeGreaterThanOrEqual(1);
+            assert.ok(successCount >= 1);
         });
 
         test('should handle concurrent CPU-intensive operations', async () => {
@@ -143,7 +156,7 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
                 'concurrent-cpu',
                 'Concurrent CPU test',
                 0,
-                { 
+                {
                     cpuIntensive: true,
                     iterations: 10000,
                     operation: 'fibonacci'
@@ -161,10 +174,10 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
             }
 
             const finalResults = await Promise.all(results);
-            
+
             // At least some should succeed
             const successCount = finalResults.filter(r => r.result && !r.error).length;
-            expect(successCount).toBeGreaterThanOrEqual(1);
+            assert.ok(successCount >= 1);
         });
     });
 
@@ -180,13 +193,13 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
                 );
 
             const results = await runConcurrentInvocations(testFunction.name, highConcurrency, payloadGenerator);
-            
+
             // Should handle high concurrency gracefully
-            expect(results).toHaveLength(highConcurrency);
-            
+            assert.strictEqual(results.length, highConcurrency);
+
             // Count successful invocations
             const successCount = results.filter(r => r.result && !r.error).length;
-            expect(successCount).toBeGreaterThanOrEqual(highConcurrency * 0.8); // At least 80% success rate
+            assert.ok(successCount >= highConcurrency * 0.8); // At least 80% success rate
         });
 
         test('should maintain response times under load', async () => {
@@ -208,10 +221,10 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
                 if (durations.length > 0) {
                     const avgDuration = durations.reduce((sum, d) => sum + d, 0) / durations.length;
                     const p95Duration = durations.sort((a, b) => a - b)[Math.floor(durations.length * 0.95)];
-                    
+
                     // Response times should remain reasonable
-                    expect(avgDuration).toBeWithinPerformanceThreshold(testData.performanceThresholds.mediumExecution);
-                    expect(p95Duration).toBeWithinPerformanceThreshold(testData.performanceThresholds.slowExecution);
+                    assertWithinPerformanceThreshold(avgDuration, testData.performanceThresholds.mediumExecution);
+                    assertWithinPerformanceThreshold(p95Duration, testData.performanceThresholds.slowExecution);
                 }
             }
         });
@@ -237,13 +250,13 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
                 );
 
             const results = await runConcurrentInvocations(testFunction.name, 5, payloadGenerator);
-            
+
             // Should handle concurrent errors gracefully
-            expect(results).toHaveLength(5);
-            
+            assert.strictEqual(results.length, 5);
+
             for (const result of results) {
                 // Each result should either succeed or fail gracefully
-                expect(result.result || result.error).toBeDefined();
+                assert.ok((result.result || result.error) !== undefined);
             }
         });
 
@@ -252,7 +265,7 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
                 'concurrent-recovery',
                 'Concurrent recovery test',
                 0,
-                { 
+                {
                     problematic: true,
                     stress: true,
                     iterations: 1000
@@ -270,10 +283,10 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
             }
 
             const finalResults = await Promise.all(results);
-            
+
             // At least some should succeed
             const successCount = finalResults.filter(r => r.result && !r.error).length;
-            expect(successCount).toBeGreaterThanOrEqual(1);
+            assert.ok(successCount >= 1);
         });
     });
 
@@ -292,12 +305,12 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
                     );
 
                 const results = await runConcurrentInvocations(testFunction.name, concurrentPerRound, payloadGenerator);
-                
-                expect(results).toHaveSuccessfulInvocations(concurrentPerRound);
-                
+
+                assertSuccessfulInvocations(results, concurrentPerRound);
+
                 // Performance should remain consistent across rounds
                 const avgDuration = results.reduce((sum, r) => sum + r.duration, 0) / results.length;
-                expect(avgDuration).toBeWithinPerformanceThreshold(testData.performanceThresholds.mediumExecution);
+                assertWithinPerformanceThreshold(avgDuration, testData.performanceThresholds.mediumExecution);
                 
                 // Wait between rounds
                 await new Promise(resolve => setTimeout(resolve, 1000));
@@ -324,7 +337,7 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
                         );
 
                     const results = await runConcurrentInvocations(testFunction.name, pattern.count, payloadGenerator);
-                    expect(results).toHaveSuccessfulInvocations(pattern.count);
+                    assertSuccessfulInvocations(results, pattern.count);
                 } else {
                     // Sequential
                     for (let i = 0; i < pattern.count; i++) {
@@ -336,7 +349,7 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
                                 0
                             )
                         );
-                        expect(result.result).toBeValidLambdaResponse();
+                        assertValidLambdaResponse(result.result);
                     }
                 }
             }

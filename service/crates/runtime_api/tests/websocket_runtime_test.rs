@@ -1,14 +1,12 @@
 use std::process::Command;
-use std::time::Duration;
-use tokio::time::timeout;
 
 #[tokio::test]
 async fn test_nodejs_websocket_bootstrap_syntax() {
     // Test that the Node.js WebSocket bootstrap file has valid syntax
     let output = Command::new("node")
         .arg("--check")
-        .arg("runtimes/nodejs18/bootstrap-websocket.js")
-        .current_dir("../../..")
+        .arg("../../runtimes/nodejs18/bootstrap-websocket.js")
+        .current_dir(".")
         .output();
 
     match output {
@@ -73,8 +71,8 @@ async fn test_python_websocket_bootstrap_syntax() {
     let output = Command::new("python3")
         .arg("-m")
         .arg("py_compile")
-        .arg("runtimes/python311/bootstrap-websocket.py")
-        .current_dir("../../..")
+        .arg("../../runtimes/python311/bootstrap-websocket.py")
+        .current_dir(".")
         .output();
 
     match output {
@@ -139,8 +137,8 @@ async fn test_example_function_syntax() {
     // Test Node.js example
     let node_output = Command::new("node")
         .arg("--check")
-        .arg("examples/websocket-test-function/index.js")
-        .current_dir("../../..")
+        .arg("../../../examples/websocket-test-function/index.js")
+        .current_dir(".")
         .output();
 
     match node_output {
@@ -159,8 +157,8 @@ async fn test_example_function_syntax() {
     let python_output = Command::new("python3")
         .arg("-m")
         .arg("py_compile")
-        .arg("examples/websocket-test-function-python/lambda_function.py")
-        .current_dir("../../..")
+        .arg("../../../examples/websocket-test-function-python/lambda_function.py")
+        .current_dir(".")
         .output();
 
     match python_output {
@@ -184,7 +182,7 @@ async fn test_websocket_dependencies() {
     let node_output = Command::new("node")
         .arg("-e")
         .arg("try { require('ws'); console.log('ws package available'); } catch(e) { console.log('ws package not available:', e.message); }")
-        .current_dir("../../../examples/websocket-test-function")
+        .current_dir(".")
         .output();
 
     match node_output {
@@ -201,7 +199,7 @@ async fn test_websocket_dependencies() {
     let python_output = Command::new("python3")
         .arg("-c")
         .arg("try: import websockets; print('websockets package available'); except ImportError as e: print('websockets package not available:', e)")
-        .current_dir("../../../examples/websocket-test-function-python")
+        .current_dir(".")
         .output();
 
     match python_output {

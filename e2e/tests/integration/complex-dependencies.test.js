@@ -1,21 +1,32 @@
 /**
  * Complex Dependencies Integration Tests
- * 
+ *
  * Tests that verify complex npm dependencies (lodash, moment, uuid, axios, validator)
  * are loaded correctly and work as expected in the Lambda runtime environment.
  */
 
+const { describe, test, before, after } = require('node:test');
+const assert = require('node:assert');
 const testData = require('../fixtures/test-data');
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { cleanupWithTempFiles } = require('../utils/test-helpers');
+const {
+    assertValidLambdaResponse,
+    assertWithinPerformanceThreshold,
+    assertSuccessfulInvocations,
+    assertMatchObject
+} = require('../utils/assertions');
+
+require('../setup');
 
 describe('Lambda@Home Complex Dependencies Tests', () => {
     let testFunctions = [];
     let complexDepsTestZip = null;
     let tempZipPath = null;
 
-    beforeAll(async () => {
+    before(async () => {
         // Build the complex dependencies test function from source
         const testFunctionPath = path.join(__dirname, '../../test-functions/large-deps-test');
         
@@ -60,22 +71,17 @@ describe('Lambda@Home Complex Dependencies Tests', () => {
         }
     });
 
-    afterAll(async () => {
-        // Clean up temp ZIP file
-        if (tempZipPath && fs.existsSync(tempZipPath)) {
-            fs.unlinkSync(tempZipPath);
-            console.log(`🗑️ Cleaned up temp ZIP file: ${tempZipPath}`);
+    after(cleanupWithTempFiles(
+        testFunctions,
+        global.testManager.client,
+        [tempZipPath],
+        {
+            timeout: 90000,
+            verbose: true,
+            verifyCleanup: true,
+            forceRemoveContainers: true
         }
-        
-        // Clean up all test functions
-        for (const testFunction of testFunctions) {
-            try {
-                await global.testManager.client.deleteFunction(testFunction.name);
-            } catch (error) {
-                console.warn(`Failed to delete function ${testFunction.name}: ${error.message}`);
-            }
-        }
-    });
+    ), 90000);
 
     describe('Lodash Dependencies', () => {
         test('should load and use lodash dependency correctly', async () => {
@@ -89,11 +95,11 @@ describe('Lambda@Home Complex Dependencies Tests', () => {
                 { operation: 'lodash_test', input: 'hello world' }
             );
 
-            expect(result).toBeValidLambdaResponse();
-            expect(result.success).toBe(true);
-            expect(result.operation).toBe('lodash_test');
-            expect(result.result.result).toBe('Hello world');
-            expect(result.validation.lodashWorking).toBe(true);
+            assertValidLambdaResponse(result);
+            assert.strictEqual(result.success, true);
+            assert.strictEqual(result.operation, 'lodash_test');
+            assert.strictEqual(result.result.result, 'Hello world');
+            assert.strictEqual(result.validation.lodashWorking, true);
         });
     });
 
@@ -109,13 +115,13 @@ describe('Lambda@Home Complex Dependencies Tests', () => {
                 { operation: 'validator_test', input: 'test@example.com' }
             );
 
-            expect(result).toBeValidLambdaResponse();
-            expect(result.success).toBe(true);
-            expect(result.operation).toBe('validator_test');
-            expect(result.result.result.isEmail).toBe(true);
-            expect(result.result.result.isURL).toBe(true);
-            expect(result.result.result.isNumeric).toBe(false); // "123" is numeric, but we're testing with "test@example.com"
-            expect(result.validation.validatorWorking).toBe(true);
+            assertValidLambdaResponse(result);
+            assert.strictEqual(result.success, true);
+            assert.strictEqual(result.operation, 'validator_test');
+            assert.strictEqual(result.result.result.isEmail, true);
+            assert.strictEqual(result.result.result.isURL, true);
+            assert.strictEqual(result.result.result.isNumeric, false); // "123" is numeric, but we're testing with "test@example.com"
+            assert.strictEqual(result.validation.validatorWorking, true);
         });
     });
 
@@ -131,11 +137,11 @@ describe('Lambda@Home Complex Dependencies Tests', () => {
                 { operation: 'uuid_test' }
             );
 
-            expect(result).toBeValidLambdaResponse();
-            expect(result.success).toBe(true);
-            expect(result.operation).toBe('uuid_test');
-            expect(result.result.result).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
-            expect(result.validation.uuidWorking).toBe(true);
+            assertValidLambdaResponse(result);
+            assert.strictEqual(result.success, true);
+            assert.strictEqual(result.operation, 'uuid_test');
+            assert.match(result.result.result, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+            assert.strictEqual(result.validation.uuidWorking, true);
         });
     });
 
@@ -151,12 +157,12 @@ describe('Lambda@Home Complex Dependencies Tests', () => {
                 { operation: 'axios_test' }
             );
 
-            expect(result).toBeValidLambdaResponse();
-            expect(result.success).toBe(true);
-            expect(result.operation).toBe('axios_test');
-            expect(result.result.result.status).toBe(200);
-            expect(result.result.result.data).toBeDefined();
-            expect(result.validation.axiosWorking).toBe(true);
+            assertValidLambdaResponse(result);
+            assert.strictEqual(result.success, true);
+            assert.strictEqual(result.operation, 'axios_test');
+            assert.strictEqual(result.result.result.status, 200);
+            assert.ok(result.result.result.data !== undefined);
+            assert.strictEqual(result.validation.axiosWorking, true);
         });
     });
 
@@ -172,22 +178,22 @@ describe('Lambda@Home Complex Dependencies Tests', () => {
                 { operation: 'all_deps_test', input: 'integration test' }
             );
 
-            expect(result).toBeValidLambdaResponse();
-            expect(result.success).toBe(true);
-            expect(result.operation).toBe('all_deps_test');
-            expect(result.result.result.lodash).toBe('Integration test');
-            expect(result.result.result.uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
-            expect(result.result.result.moment).toBeDefined();
-            expect(result.result.result.validator.isEmail).toBe(true);
-            expect(result.result.result.validator.isURL).toBe(true);
-            
+            assertValidLambdaResponse(result);
+            assert.strictEqual(result.success, true);
+            assert.strictEqual(result.operation, 'all_deps_test');
+            assert.strictEqual(result.result.result.lodash, 'Integration test');
+            assert.match(result.result.result.uuid, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+            assert.ok(result.result.result.moment !== undefined);
+            assert.strictEqual(result.result.result.validator.isEmail, true);
+            assert.strictEqual(result.result.result.validator.isURL, true);
+
             // Verify all dependencies are working
-            expect(result.validation.allDependenciesLoaded).toBe(true);
-            expect(result.validation.lodashWorking).toBe(true);
-            expect(result.validation.momentWorking).toBe(true);
-            expect(result.validation.uuidWorking).toBe(true);
-            expect(result.validation.axiosWorking).toBe(true);
-            expect(result.validation.validatorWorking).toBe(true);
+            assert.strictEqual(result.validation.allDependenciesLoaded, true);
+            assert.strictEqual(result.validation.lodashWorking, true);
+            assert.strictEqual(result.validation.momentWorking, true);
+            assert.strictEqual(result.validation.uuidWorking, true);
+            assert.strictEqual(result.validation.axiosWorking, true);
+            assert.strictEqual(result.validation.validatorWorking, true);
         });
     });
 
@@ -221,15 +227,15 @@ describe('Lambda@Home Complex Dependencies Tests', () => {
 
             // All should succeed
             for (const result of results) {
-                expect(result.result).toBeValidLambdaResponse();
-                expect(result.result.success).toBe(true);
-                expect(result.result.validation.allDependenciesLoaded).toBe(true);
+                assertValidLambdaResponse(result.result);
+                assert.strictEqual(result.result.success, true);
+                assert.strictEqual(result.result.validation.allDependenciesLoaded, true);
             }
 
             // Performance should be reasonable (higher threshold for complex dependencies)
             const durations = results.map(r => r.duration);
             const avgDuration = durations.reduce((sum, d) => sum + d, 0) / durations.length;
-            expect(avgDuration).toBeLessThan(2000); // 2 second threshold for complex dependency-loaded functions
+            assert.ok(avgDuration < 2000); // 2 second threshold for complex dependency-loaded functions
         });
     });
 
@@ -245,31 +251,33 @@ describe('Lambda@Home Complex Dependencies Tests', () => {
                 { operation: 'invalid_operation' }
             );
 
-            expect(result).toBeValidLambdaResponse();
-            expect(result.success).toBe(true);
-            expect(result.operation).toBe('invalid_operation'); // The function passes through the operation
-            expect(result.validation.allDependenciesLoaded).toBe(true);
+            assertValidLambdaResponse(result);
+            assert.strictEqual(result.success, true);
+            assert.strictEqual(result.operation, 'invalid_operation'); // The function passes through the operation
+            assert.strictEqual(result.validation.allDependenciesLoaded, true);
         });
     });
 
     describe('Complex Dependencies Runtime Compatibility', () => {
-        test.each(testData.runtimes)('should work with $name runtime', async (runtime) => {
-            const testFunction = await createComplexDepsTestFunction(`complex-deps-${runtime.name.replace('.', '-')}`, runtime.name);
-            testFunctions.push(testFunction);
+        for (const runtime of testData.runtimes) {
+            test(`should work with ${runtime.name} runtime`, async () => {
+                const testFunction = await createComplexDepsTestFunction(`complex-deps-${runtime.name.replace('.', '-')}`, runtime.name);
+                testFunctions.push(testFunction);
 
-            const result = await invokeComplexDepsTestFunction(
-                testFunction.name,
-                `runtime-${runtime.name}`,
-                `Testing complex dependencies with ${runtime.name}`,
-                { operation: 'default' }
-            );
+                const result = await invokeComplexDepsTestFunction(
+                    testFunction.name,
+                    `runtime-${runtime.name}`,
+                    `Testing complex dependencies with ${runtime.name}`,
+                    { operation: 'default' }
+                );
 
-            expect(result).toBeValidLambdaResponse();
-            expect(result.success).toBe(true);
-            expect(result.nodeVersion).toBe(runtime.version);
-            expect(result.runtime).toBe('node');
-            expect(result.validation.allDependenciesLoaded).toBe(true);
-        });
+                assertValidLambdaResponse(result);
+                assert.strictEqual(result.success, true);
+                assert.strictEqual(result.nodeVersion, runtime.version);
+                assert.strictEqual(result.runtime, 'node');
+                assert.strictEqual(result.validation.allDependenciesLoaded, true);
+            });
+        }
     });
 
     describe('Complex Dependencies Concurrent Usage', () => {
@@ -287,18 +295,18 @@ describe('Lambda@Home Complex Dependencies Tests', () => {
                 );
 
             const results = await runConcurrentInvocations(testFunction.name, concurrentCount, payloadGenerator);
-            
-            expect(results).toHaveSuccessfulInvocations(concurrentCount);
-            
+
+            assertSuccessfulInvocations(results, concurrentCount);
+
             // All results should have dependencies working
             for (const result of results) {
-                expect(result.result.success).toBe(true);
-                expect(result.result.validation.allDependenciesLoaded).toBe(true);
-                expect(result.result.validation.lodashWorking).toBe(true);
-                expect(result.result.validation.momentWorking).toBe(true);
-                expect(result.result.validation.uuidWorking).toBe(true);
-                expect(result.result.validation.axiosWorking).toBe(true);
-                expect(result.result.validation.validatorWorking).toBe(true);
+                assert.strictEqual(result.result.success, true);
+                assert.strictEqual(result.result.validation.allDependenciesLoaded, true);
+                assert.strictEqual(result.result.validation.lodashWorking, true);
+                assert.strictEqual(result.result.validation.momentWorking, true);
+                assert.strictEqual(result.result.validation.uuidWorking, true);
+                assert.strictEqual(result.result.validation.axiosWorking, true);
+                assert.strictEqual(result.result.validation.validatorWorking, true);
             }
         });
     });

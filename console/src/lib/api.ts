@@ -7,8 +7,8 @@ import {
   LambdaServiceStats
 } from '../types/api';
 
-// Default to relative /api when served behind the same origin; override via VITE_API_URL in dev
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+// Default to User API on port 8000; override via VITE_API_URL in dev
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 class ApiError extends Error {
   constructor(

@@ -1,6 +1,6 @@
 use lambda_models::Function;
 
-pub fn dockerfile(function: &Function) -> String {
+pub fn dockerfile(function: &Function, runtime_api_port: u16) -> String {
     format!(
         r#"
 FROM rust:1.75-alpine as builder
@@ -35,7 +35,7 @@ COPY --from=builder /var/task/target/release/{bin} /var/task/
 # Create bootstrap script
 RUN echo '#!/bin/sh
 set -e
-export AWS_LAMBDA_RUNTIME_API=${{AWS_LAMBDA_RUNTIME_API:-localhost:9001}}
+export AWS_LAMBDA_RUNTIME_API=${{AWS_LAMBDA_RUNTIME_API:-localhost:{runtime_api_port}}}
 export AWS_LAMBDA_FUNCTION_NAME=${{AWS_LAMBDA_FUNCTION_NAME}}
 export AWS_LAMBDA_FUNCTION_VERSION=${{AWS_LAMBDA_FUNCTION_VERSION}}
 export AWS_LAMBDA_FUNCTION_MEMORY_SIZE=${{AWS_LAMBDA_FUNCTION_MEMORY_SIZE}}

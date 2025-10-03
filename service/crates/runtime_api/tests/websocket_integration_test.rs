@@ -7,8 +7,7 @@ use lambda_control::{pending::Pending, queues::Queues};
 use lambda_runtime_api::{build_router, RtState};
 use serde_json::json;
 use tower::ServiceExt;
-use tokio_tungstenite::{connect_async, tungstenite::Message};
-use futures_util::{SinkExt, StreamExt};
+// WebSocket integration tests
 
 #[tokio::test]
 async fn test_websocket_endpoint_exists() {

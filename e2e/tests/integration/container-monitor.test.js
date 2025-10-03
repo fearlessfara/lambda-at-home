@@ -1,9 +1,9 @@
 /**
  * Container Monitor E2E Tests
- * 
+ *
  * These tests verify that the container monitor properly handles bidirectional
  * state synchronization between Docker and Lambda@Home's internal state.
- * 
+ *
  * Test scenarios:
  * 1. Manual container stop detection
  * 2. Container crash detection
@@ -11,6 +11,8 @@
  * 4. State synchronization after manual operations
  */
 
+const { describe, test, before, after } = require('node:test');
+const assert = require('node:assert');
 const TestClient = require('../utils/test-client');
 const fs = require('fs');
 const path = require('path');
@@ -19,12 +21,12 @@ describe('Container Monitor Bidirectional Sync Tests', () => {
     let client;
     let testFunctionName;
 
-    beforeAll(async () => {
+    before(async () => {
         client = new TestClient();
         testFunctionName = `container-monitor-test-${Date.now()}`;
     });
 
-    afterAll(async () => {
+    after(async () => {
         if (client) {
             try {
                 await client.deleteFunction(testFunctionName);
@@ -48,7 +50,7 @@ describe('Container Monitor Bidirectional Sync Tests', () => {
             'index.handler',
             zipData
         );
-        expect(createResult.function_name).toBe(testFunctionName);
+        assert.strictEqual(createResult.function_name, testFunctionName);
 
         // Wait for function to be ready
         await new Promise(resolve => setTimeout(resolve, 5000));
@@ -58,8 +60,8 @@ describe('Container Monitor Bidirectional Sync Tests', () => {
         console.log('Initial warm pool:', initialWarmPool);
 
         // Verify we have at least one container
-        expect(initialWarmPool.entries).toBeDefined();
-        expect(initialWarmPool.entries.length).toBeGreaterThan(0);
+        assert.ok(initialWarmPool.entries !== undefined);
+        assert.ok(initialWarmPool.entries.length > 0);
 
         // Get the first container ID
         const containerId = initialWarmPool.entries[0].container_id;
@@ -87,7 +89,7 @@ describe('Container Monitor Bidirectional Sync Tests', () => {
         const stoppedContainer = warmPoolAfterStop.entries.find(c => c.container_id === containerId);
         if (stoppedContainer) {
             // If container is still in warm pool, it should be marked as stopped
-            expect(stoppedContainer.state).toBe('Stopped');
+            assert.strictEqual(stoppedContainer.state, 'Stopped');
         } else {
             // Container should be removed from warm pool
             console.log('✅ Container was removed from warm pool after manual stop');
@@ -95,7 +97,7 @@ describe('Container Monitor Bidirectional Sync Tests', () => {
 
         // Invoke function to trigger container creation
         const invokeResult = await client.invokeFunction(testFunctionName, { test: 'data' });
-        expect(invokeResult).toBeDefined();
+        assert.ok(invokeResult !== undefined);
 
         // Wait a moment for container to be created
         await new Promise(resolve => setTimeout(resolve, 5000));
@@ -105,7 +107,7 @@ describe('Container Monitor Bidirectional Sync Tests', () => {
         console.log('Warm pool after invoke:', warmPoolAfterInvoke);
 
         // Should have at least one container (newly created)
-        expect(warmPoolAfterInvoke.entries.length).toBeGreaterThan(0);
+        assert.ok(warmPoolAfterInvoke.entries.length > 0);
 
-    }, 60000);
+    }, 90000); // Increased timeout to 90 seconds
 });

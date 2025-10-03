@@ -2,33 +2,47 @@
  * Runtime Integration Tests
  */
 
+const { describe, test, after } = require('node:test');
+const assert = require('node:assert');
 const testData = require('../fixtures/test-data');
+const { cleanupAfterAll } = require('../utils/test-helpers');
+const {
+    assertValidLambdaResponse,
+    assertWithinPerformanceThreshold,
+    assertSuccessfulInvocations,
+    assertMatchObject
+} = require('../utils/assertions');
+
+require('../setup');
 
 describe('Lambda@Home Runtime Integration Tests', () => {
     let testFunctions = [];
 
-    afterAll(async () => {
-        for (const testFunction of testFunctions) {
-            await global.testManager.client.deleteFunction(testFunction.name);
-        }
-    });
+    after(cleanupAfterAll(testFunctions, global.testManager.client, {
+        timeout: 90000,
+        verbose: false,
+        verifyCleanup: true,
+        forceRemoveContainers: true
+    }));
 
     describe('Node.js Runtime Support', () => {
-        test.each(testData.runtimes)('should support $name runtime', async (runtime) => {
-            const testFunction = await createTestFunction(`runtime-test-${runtime.name.replace('.', '-')}`, runtime.name);
-            testFunctions.push(testFunction);
+        for (const runtime of testData.runtimes) {
+            test(`should support ${runtime.name} runtime`, async () => {
+                const testFunction = await createTestFunction(`runtime-test-${runtime.name.replace('.', '-')}`, runtime.name);
+                testFunctions.push(testFunction);
 
-            const result = await invokeTestFunction(
-                testFunction.name,
-                'runtime-test',
-                `Testing ${runtime.name} runtime`,
-                0
-            );
+                const result = await invokeTestFunction(
+                    testFunction.name,
+                    'runtime-test',
+                    `Testing ${runtime.name} runtime`,
+                    0
+                );
 
-            expect(result).toBeValidLambdaResponse();
-            expect(result.nodeVersion).toBe(runtime.version);
-            expect(result.runtime).toBe('node');
-        });
+                assertValidLambdaResponse(result);
+                assert.strictEqual(result.nodeVersion, runtime.version);
+                assert.strictEqual(result.runtime, 'node');
+            });
+        }
 
         test('should handle runtime-specific features', async () => {
             const testFunction = await createTestFunction('runtime-features-test');
@@ -51,8 +65,8 @@ describe('Lambda@Home Runtime Integration Tests', () => {
                     testPayloads[i]
                 );
 
-                expect(result).toBeValidLambdaResponse();
-                expect(result.event).toMatchObject(testPayloads[i]);
+                assertValidLambdaResponse(result);
+                assertMatchObject(result.event, testPayloads[i]);
             }
         });
     });
@@ -90,8 +104,7 @@ describe('Lambda@Home Runtime Integration Tests', () => {
 
             // Both runtimes should perform reasonably well
             for (const [runtimeName, data] of Object.entries(runtimeResults)) {
-                expect(data.avgDuration).toBeWithinPerformanceThreshold(testData.performanceThresholds.fastExecution);
-                // Runtime performance logged only in verbose mode
+                assertWithinPerformanceThreshold(data.avgDuration, testData.performanceThresholds.fastExecution);
             }
         });
     });
@@ -116,10 +129,10 @@ describe('Lambda@Home Runtime Integration Tests', () => {
                         scenario.payload ? { largeData: scenario.payload } : {}
                     );
 
-                    expect(result).toBeValidLambdaResponse();
+                    assertValidLambdaResponse(result);
                 } catch (error) {
                     // Some errors are expected and should be handled gracefully
-                    expect(error.message).toBeDefined();
+                    assert.ok(error.message);
                 }
             }
         });
@@ -144,15 +157,15 @@ describe('Lambda@Home Runtime Integration Tests', () => {
                 memoryIntensivePayload
             );
 
-            expect(result).toBeValidLambdaResponse();
-            expect(result.event).toMatchObject(memoryIntensivePayload);
+            assertValidLambdaResponse(result);
+            assertMatchObject(result.event, memoryIntensivePayload);
         });
 
         test('should handle concurrent memory usage', async () => {
             const testFunction = await createTestFunction('concurrent-memory-test');
             testFunctions.push(testFunction);
 
-            const payloadGenerator = (index) => 
+            const payloadGenerator = (index) =>
                 global.testManager.generateConcurrentPayload(
                     index,
                     'concurrent-memory',
@@ -162,12 +175,12 @@ describe('Lambda@Home Runtime Integration Tests', () => {
                 );
 
             const results = await runConcurrentInvocations(testFunction.name, 5, payloadGenerator);
-            
-            expect(results).toHaveSuccessfulInvocations(5);
-            
+
+            assertSuccessfulInvocations(results, 5);
+
             // All should complete within reasonable time even with memory pressure
             const maxDuration = Math.max(...results.map(r => r.duration));
-            expect(maxDuration).toBeWithinPerformanceThreshold(testData.performanceThresholds.mediumExecution);
+            assertWithinPerformanceThreshold(maxDuration, testData.performanceThresholds.mediumExecution);
         });
     });
 
@@ -201,10 +214,10 @@ describe('Lambda@Home Runtime Integration Tests', () => {
 
             // All runtimes should produce compatible responses
             for (const { runtime, result } of results) {
-                expect(result).toBeValidLambdaResponse();
-                expect(result.testId).toBe('compatibility-test');
-                expect(result.message).toBe('Testing API compatibility');
-                expect(result.event).toMatchObject(testPayload);
+                assertValidLambdaResponse(result);
+                assert.strictEqual(result.testId, 'compatibility-test');
+                assert.strictEqual(result.message, 'Testing API compatibility');
+                assertMatchObject(result.event, testPayload);
             }
         });
     });

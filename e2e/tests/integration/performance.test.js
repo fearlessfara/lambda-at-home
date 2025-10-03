@@ -11,6 +11,18 @@
  * 4. Calculate cold start = first invocation - average warm invocation
  */
 
+const { describe, test, before, after } = require('node:test');
+const assert = require('node:assert');
+const {
+    assertValidLambdaResponse,
+    assertWithinPerformanceThreshold,
+    assertSuccessfulInvocations,
+    assertMatchObject
+} = require('../utils/assertions');
+const { cleanupSingleFunction, cleanupAfterAll, cleanupWithTempFiles } = require('../utils/test-helpers');
+
+require('../setup');
+
 const testData = require('../fixtures/test-data');
 const fs = require('fs');
 const path = require('path');
@@ -26,12 +38,12 @@ describe('Lambda@Home Performance Tests', () => {
     const primeCounts = [100, 1000, 10000, 100000]; // Different workloads - key benchmarks
     const warmIterations = 50; // Number of warm invocations for averaging
     
-    beforeAll(async () => {
+    before(async () => {
         console.log('🚀 Starting Lambda@Home Performance Test Suite');
         console.log(`📊 Testing ${memoryConfigs.length} memory configs × ${primeCounts.length} prime counts`);
     });
 
-    afterAll(async () => {
+    after(async () => {
         // Clean up all test functions
         for (const result of results) {
             if (result.functionName) {
@@ -103,7 +115,7 @@ describe('Lambda@Home Performance Tests', () => {
                 const coldResult = await invokePrimeFunction(functionName, primeCount);
                 const coldEndTime = Date.now();
                 const coldDuration = coldEndTime - coldStartTime;
-                expect(coldResult.count).toBe(primeCount);
+                assert.strictEqual(coldResult.count, primeCount);
                 
                 console.log(`❄️  Cold start: ${Math.round(coldDuration)}ms`);
                 
@@ -111,7 +123,7 @@ describe('Lambda@Home Performance Tests', () => {
                 console.log(`🔥 Running warm-up invocations...`);
                 for (let i = 0; i < 3; i++) {
                     const warmupResult = await invokePrimeFunction(functionName, primeCount);
-                    expect(warmupResult.count).toBe(primeCount);
+                    assert.strictEqual(warmupResult.count, primeCount);
                     await new Promise(resolve => setTimeout(resolve, 100));
                 }
                 
@@ -123,7 +135,7 @@ describe('Lambda@Home Performance Tests', () => {
                     const warmResult = await invokePrimeFunction(functionName, primeCount);
                     const warmEnd = Date.now();
                     warmDurations.push(warmEnd - warmStart);
-                    expect(warmResult.count).toBe(primeCount);
+                    assert.strictEqual(warmResult.count, primeCount);
                     await new Promise(resolve => setTimeout(resolve, 50));
                 }
                 

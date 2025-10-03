@@ -1,17 +1,15 @@
 /**
- * Jest Setup - Global test setup and configuration
+ * Test Setup - Global test setup using Node.js native test runner
  */
 
 const TestManager = require('./utils/test-manager');
+const { before, after } = require('node:test');
 
 // Global test manager instance
 global.testManager = new TestManager();
 
-// Global test timeout
-jest.setTimeout(60000);
-
 // Global setup
-beforeAll(async () => {
+before(async () => {
     try {
         await global.testManager.setup();
     } catch (error) {
@@ -21,70 +19,11 @@ beforeAll(async () => {
 });
 
 // Global teardown
-afterAll(async () => {
+after(async () => {
     try {
         await global.testManager.teardown();
     } catch (error) {
         console.error('❌ Global teardown failed:', error.message);
-    }
-});
-
-// Custom matchers
-expect.extend({
-    toBeValidLambdaResponse(received) {
-        const pass = received && 
-                    typeof received === 'object' &&
-                    received.success === true &&
-                    typeof received.testId === 'string' &&
-                    typeof received.message === 'string' &&
-                    typeof received.timestamp === 'string' &&
-                    typeof received.nodeVersion === 'string' &&
-                    received.runtime === 'node';
-
-        if (pass) {
-            return {
-                message: () => `expected ${received} not to be a valid Lambda response`,
-                pass: true,
-            };
-        } else {
-            return {
-                message: () => `expected ${JSON.stringify(received)} to be a valid Lambda response`,
-                pass: false,
-            };
-        }
-    },
-
-    toBeWithinPerformanceThreshold(received, threshold) {
-        const pass = received <= threshold;
-
-        if (pass) {
-            return {
-                message: () => `expected ${received}ms not to be within ${threshold}ms threshold`,
-                pass: true,
-            };
-        } else {
-            return {
-                message: () => `expected ${received}ms to be within ${threshold}ms threshold`,
-                pass: false,
-            };
-        }
-    },
-
-    toHaveSuccessfulInvocations(received, expectedCount) {
-        const successCount = received.filter(r => r.result && r.result.success && !r.error).length;
-        const pass = successCount === expectedCount;
-
-        if (pass) {
-            return {
-                message: () => `expected ${successCount} successful invocations not to equal ${expectedCount}`,
-                pass: true,
-            };
-        } else {
-            return {
-                message: () => `expected ${successCount} successful invocations to equal ${expectedCount}`,
-                pass: false,
-            };
-        }
     }
 });
 
@@ -120,7 +59,7 @@ if (!process.env.VERBOSE_TESTS) {
             originalConsoleLog(...args);
         }
     };
-    
+
     console.error = (...args) => {
         if (args[0] && (args[0].includes('❌') || args[0].includes('ERROR'))) {
             originalConsoleError(...args);

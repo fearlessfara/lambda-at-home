@@ -1,21 +1,32 @@
 /**
  * End-to-End Dependencies Integration Test
- * 
+ *
  * This test demonstrates the complete workflow of creating a Lambda function
  * with node_modules dependencies via the API and testing its functionality.
  */
 
+const { describe, test, before, after } = require('node:test');
+const assert = require('node:assert');
 const testData = require('../fixtures/test-data');
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const {
+    assertValidLambdaResponse,
+    assertWithinPerformanceThreshold,
+    assertSuccessfulInvocations,
+    assertMatchObject
+} = require('../utils/assertions');
+const { cleanupWithTempFiles } = require('../utils/test-helpers');
+
+require('../setup');
 
 describe('Lambda@Home Dependencies E2E Test', () => {
     let testFunctions = [];
     let depsTestZip = null;
     let tempZipPath = null;
 
-    beforeAll(async () => {
+    before(async () => {
         // Build the test function with dependencies from source
         const testFunctionPath = path.join(__dirname, '../../test-functions/deps-test');
         
@@ -60,13 +71,13 @@ describe('Lambda@Home Dependencies E2E Test', () => {
         }
     });
 
-    afterAll(async () => {
+    after(async () => {
         // Clean up temp ZIP file
         if (tempZipPath && fs.existsSync(tempZipPath)) {
             fs.unlinkSync(tempZipPath);
             console.log(`🗑️ Cleaned up temp ZIP file: ${tempZipPath}`);
         }
-        
+
         // Clean up all test functions
         for (const testFunction of testFunctions) {
             try {
@@ -92,21 +103,21 @@ describe('Lambda@Home Dependencies E2E Test', () => {
                 depsTestZip
             );
 
-            expect(createResult).toBeDefined();
+            assert.ok(createResult !== undefined);
             console.log('Create result:', JSON.stringify(createResult, null, 2));
-            
+
             // The response structure might vary, so let's be more flexible
             if (createResult.FunctionName) {
-                expect(createResult.FunctionName).toBe(functionName);
+                assert.strictEqual(createResult.FunctionName, functionName);
             }
             if (createResult.Runtime) {
-                expect(createResult.Runtime).toBe(runtime);
+                assert.strictEqual(createResult.Runtime, runtime);
             }
             if (createResult.Handler) {
-                expect(createResult.Handler).toBe(handler);
+                assert.strictEqual(createResult.Handler, handler);
             }
             if (createResult.State) {
-                expect(createResult.State).toBe('Active');
+                assert.strictEqual(createResult.State, 'Active');
             }
 
             // Track function for cleanup
@@ -120,24 +131,24 @@ describe('Lambda@Home Dependencies E2E Test', () => {
             console.log(`📋 Getting function details...`);
             const functionDetails = await global.testManager.client.getFunction(functionName);
             
-            expect(functionDetails).toBeDefined();
+            assert.ok(functionDetails !== undefined);
             console.log('Function details:', JSON.stringify(functionDetails, null, 2));
-            
+
             // The response structure might vary, so let's be more flexible
             if (functionDetails.FunctionName) {
-                expect(functionDetails.FunctionName).toBe(functionName);
+                assert.strictEqual(functionDetails.FunctionName, functionName);
             }
             if (functionDetails.Runtime) {
-                expect(functionDetails.Runtime).toBe(runtime);
+                assert.strictEqual(functionDetails.Runtime, runtime);
             }
             if (functionDetails.Handler) {
-                expect(functionDetails.Handler).toBe(handler);
+                assert.strictEqual(functionDetails.Handler, handler);
             }
             if (functionDetails.State) {
-                expect(functionDetails.State).toBe('Active');
+                assert.strictEqual(functionDetails.State, 'Active');
             }
             if (functionDetails.CodeSize) {
-                expect(functionDetails.CodeSize).toBeGreaterThan(0);
+                assert.ok(functionDetails.CodeSize > 0);
             }
 
             // Step 4: Test basic invocation
@@ -149,14 +160,14 @@ describe('Lambda@Home Dependencies E2E Test', () => {
             };
 
             const basicResult = await global.testManager.client.invokeFunction(functionName, basicPayload);
-            
-            expect(basicResult).toBeValidLambdaResponse();
-            expect(basicResult.success).toBe(true);
-            expect(basicResult.testId).toBe('e2e-basic-test');
-            expect(basicResult.runtime).toBe('node');
-            expect(basicResult.validation.allDependenciesLoaded).toBe(true);
-            expect(basicResult.validation.uuidWorking).toBe(true);
-            expect(basicResult.uuid.isValid).toBe(true);
+
+            assertValidLambdaResponse(basicResult);
+            assert.strictEqual(basicResult.success, true);
+            assert.strictEqual(basicResult.testId, 'e2e-basic-test');
+            assert.strictEqual(basicResult.runtime, 'node');
+            assert.strictEqual(basicResult.validation.allDependenciesLoaded, true);
+            assert.strictEqual(basicResult.validation.uuidWorking, true);
+            assert.strictEqual(basicResult.uuid.isValid, true);
 
             // Step 5: Test dependency functionality
             console.log(`🔧 Testing dependency functionality...`);
@@ -167,12 +178,12 @@ describe('Lambda@Home Dependencies E2E Test', () => {
             };
 
             const depsResult = await global.testManager.client.invokeFunction(functionName, depsPayload);
-            
-            expect(depsResult).toBeValidLambdaResponse();
-            expect(depsResult.success).toBe(true);
-            expect(depsResult.uuid).toBeDefined();
-            expect(depsResult.uuid.generated).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
-            expect(depsResult.uuid.isValid).toBe(true);
+
+            assertValidLambdaResponse(depsResult);
+            assert.strictEqual(depsResult.success, true);
+            assert.ok(depsResult.uuid !== undefined);
+            assert.match(depsResult.uuid.generated, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+            assert.strictEqual(depsResult.uuid.isValid, true);
 
             // Step 6: Test performance
             console.log(`⚡ Testing performance...`);
@@ -183,10 +194,10 @@ describe('Lambda@Home Dependencies E2E Test', () => {
             };
 
             const perfResult = await measureInvocation(functionName, perfPayload);
-            
-            expect(perfResult.result).toBeValidLambdaResponse();
-            expect(perfResult.result.success).toBe(true);
-            expect(perfResult.duration).toBeLessThan(1000); // Should complete within 1 second
+
+            assertValidLambdaResponse(perfResult.result);
+            assert.strictEqual(perfResult.result.success, true);
+            assert.ok(perfResult.duration < 1000); // Should complete within 1 second
 
             // Step 7: Test concurrent invocations
             console.log(`🔄 Testing concurrent invocations...`);
@@ -206,10 +217,10 @@ describe('Lambda@Home Dependencies E2E Test', () => {
 
             // Verify all concurrent invocations succeeded
             for (let i = 0; i < concurrentResults.length; i++) {
-                expect(concurrentResults[i]).toBeValidLambdaResponse();
-                expect(concurrentResults[i].success).toBe(true);
-                expect(concurrentResults[i].testId).toBe(`e2e-concurrent-${i}`);
-                expect(concurrentResults[i].validation.allDependenciesLoaded).toBe(true);
+                assertValidLambdaResponse(concurrentResults[i]);
+                assert.strictEqual(concurrentResults[i].success, true);
+                assert.strictEqual(concurrentResults[i].testId, `e2e-concurrent-${i}`);
+                assert.strictEqual(concurrentResults[i].validation.allDependenciesLoaded, true);
             }
 
             // Step 8: Test error handling
@@ -221,33 +232,33 @@ describe('Lambda@Home Dependencies E2E Test', () => {
             };
 
             const errorResult = await global.testManager.client.invokeFunction(functionName, errorPayload);
-            
+
             // Should still work even with null input
-            expect(errorResult).toBeValidLambdaResponse();
-            expect(errorResult.success).toBe(true);
+            assertValidLambdaResponse(errorResult);
+            assert.strictEqual(errorResult.success, true);
 
             // Step 9: Test function listing
             console.log(`📝 Testing function listing...`);
             const functionsList = await global.testManager.client.listFunctions();
             
-            expect(functionsList).toBeDefined();
+            assert.ok(functionsList !== undefined);
             console.log('Functions list:', JSON.stringify(functionsList, null, 2));
-            
+
             // The response structure might vary, so let's be more flexible
             if (Array.isArray(functionsList)) {
                 const ourFunction = functionsList.find(f => f.FunctionName === functionName);
                 if (ourFunction) {
-                    expect(ourFunction.FunctionName).toBe(functionName);
+                    assert.strictEqual(ourFunction.FunctionName, functionName);
                     if (ourFunction.Runtime) {
-                        expect(ourFunction.Runtime).toBe(runtime);
+                        assert.strictEqual(ourFunction.Runtime, runtime);
                     }
                 }
             } else if (functionsList.Functions && Array.isArray(functionsList.Functions)) {
                 const ourFunction = functionsList.Functions.find(f => f.FunctionName === functionName);
                 if (ourFunction) {
-                    expect(ourFunction.FunctionName).toBe(functionName);
+                    assert.strictEqual(ourFunction.FunctionName, functionName);
                     if (ourFunction.Runtime) {
-                        expect(ourFunction.Runtime).toBe(runtime);
+                        assert.strictEqual(ourFunction.Runtime, runtime);
                     }
                 }
             }
@@ -276,9 +287,9 @@ describe('Lambda@Home Dependencies E2E Test', () => {
                     depsTestZip
                 );
 
-                expect(createResult).toBeDefined();
+                assert.ok(createResult !== undefined);
                 if (createResult.Runtime) {
-                    expect(createResult.Runtime).toBe(runtime);
+                    assert.strictEqual(createResult.Runtime, runtime);
                 }
                 
                 // Track for cleanup
@@ -295,11 +306,11 @@ describe('Lambda@Home Dependencies E2E Test', () => {
                 };
 
                 const result = await global.testManager.client.invokeFunction(functionName, testPayload);
-                
-                expect(result).toBeValidLambdaResponse();
-                expect(result.success).toBe(true);
-                expect(result.nodeVersion).toBeDefined();
-                expect(result.validation.allDependenciesLoaded).toBe(true);
+
+                assertValidLambdaResponse(result);
+                assert.strictEqual(result.success, true);
+                assert.ok(result.nodeVersion !== undefined);
+                assert.strictEqual(result.validation.allDependenciesLoaded, true);
 
                 console.log(`✅ Runtime ${runtime} test completed`);
             }
@@ -318,9 +329,9 @@ describe('Lambda@Home Dependencies E2E Test', () => {
                 depsTestZip
             );
 
-            expect(createResult).toBeDefined();
+            assert.ok(createResult !== undefined);
             if (createResult.FunctionName) {
-                expect(createResult.FunctionName).toBe(functionName);
+                assert.strictEqual(createResult.FunctionName, functionName);
             }
 
             // Wait for ready
@@ -328,21 +339,21 @@ describe('Lambda@Home Dependencies E2E Test', () => {
 
             // Verify function exists
             const functionDetails = await global.testManager.client.getFunction(functionName);
-            expect(functionDetails).toBeDefined();
+            assert.ok(functionDetails !== undefined);
             if (functionDetails.FunctionName) {
-                expect(functionDetails.FunctionName).toBe(functionName);
+                assert.strictEqual(functionDetails.FunctionName, functionName);
             }
 
             // Delete function
             console.log(`🗑️ Deleting function: ${functionName}`);
             const deleteResult = await global.testManager.client.deleteFunction(functionName);
-            
+
             // Verify function is deleted
             try {
                 await global.testManager.client.getFunction(functionName);
                 throw new Error('Function should have been deleted');
             } catch (error) {
-                expect(error.message).toContain('404');
+                assert.ok(error.message.includes('404'));
             }
 
             console.log(`✅ Function deletion test completed`);
@@ -379,15 +390,15 @@ describe('Lambda@Home Dependencies E2E Test', () => {
                 };
 
                 const result = await global.testManager.client.invokeFunction(functionName, payload);
-                
-                expect(result).toBeValidLambdaResponse();
-                expect(result.success).toBe(true);
-                expect(result.validation.allDependenciesLoaded).toBe(true);
-                expect(result.validation.uuidWorking).toBe(true);
-                expect(result.uuid.isValid).toBe(true);
-                
+
+                assertValidLambdaResponse(result);
+                assert.strictEqual(result.success, true);
+                assert.strictEqual(result.validation.allDependenciesLoaded, true);
+                assert.strictEqual(result.validation.uuidWorking, true);
+                assert.strictEqual(result.uuid.isValid, true);
+
                 // Verify UUID is different each time (not cached)
-                expect(result.uuid.generated).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+                assert.match(result.uuid.generated, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
             }
 
             console.log(`✅ Dependencies validation test completed`);

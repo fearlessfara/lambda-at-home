@@ -986,7 +986,7 @@ impl ControlPlane {
             // Build Docker image first
             let mut packaging_service =
                 lambda_packaging::PackagingService::new(self.config.clone());
-            packaging_service.build_image(&function, &image_ref).await?;
+            packaging_service.build_image(&function, &image_ref, self.config.server.port_runtime_api).await?;
 
             // Create container: generate instance id and inject as env
             let instance_id = uuid::Uuid::new_v4().to_string();
@@ -1043,7 +1043,7 @@ impl ControlPlane {
                 );
                 let mut packaging_service =
                     lambda_packaging::PackagingService::new(self.config.clone());
-                packaging_service.build_image(&function, &image_ref).await?;
+                packaging_service.build_image(&function, &image_ref, self.config.server.port_runtime_api).await?;
 
                 let instance_id = uuid::Uuid::new_v4().to_string();
                 let mut env_vars = self.resolve_env_vars(&function).await?;
@@ -1374,7 +1374,7 @@ impl ControlPlane {
     }
 
     fn is_valid_runtime(&self, runtime: &str) -> bool {
-        matches!(runtime, "nodejs18.x" | "nodejs22.x" | "python3.11" | "rust")
+        matches!(runtime, "nodejs18.x" | "nodejs22.x" | "nodejs24.x" | "python3.11" | "rust")
     }
 
     async fn function_exists(&self, name: &str) -> Result<bool, LambdaError> {
@@ -1816,7 +1816,7 @@ impl ControlPlane {
             // Build Docker image first
             let mut packaging_service =
                 lambda_packaging::PackagingService::new(self.config.clone());
-            packaging_service.build_image(function, &image_ref).await?;
+            packaging_service.build_image(function, &image_ref, self.config.server.port_runtime_api).await?;
 
             // Create container: generate instance id and inject as env
             let instance_id = uuid::Uuid::new_v4().to_string();

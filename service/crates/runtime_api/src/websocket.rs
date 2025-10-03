@@ -373,7 +373,7 @@ async fn start_invocation_loop(
             function_name: function_name.clone(),
             runtime: query.runtime.unwrap_or_else(|| "nodejs18.x".to_string()),
             version: query.version.unwrap_or_else(|| "LATEST".to_string()),
-            env_hash: query.env_hash.unwrap_or_else(|| "".to_string()),
+            env_hash: query.env_hash.unwrap_or_default(),
         };
 
         loop {

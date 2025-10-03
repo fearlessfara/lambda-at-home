@@ -4,7 +4,6 @@ use axum::{
     Router,
 };
 use lambda_control::{pending::Pending, queues::Queues};
-use lambda_control::WorkItem;
 use lambda_runtime_api::{build_router, RtState};
 use serde_json::json;
 use tower::ServiceExt;
