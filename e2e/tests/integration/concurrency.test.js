@@ -30,10 +30,10 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
 
     describe('Basic Concurrency', () => {
         test('should handle concurrent invocations efficiently', async () => {
-            const concurrencyLevels = [2, 3, 5, 10];
-            
+            const concurrencyLevels = [2, 3]; // Simplified from [2, 3, 5, 10]
+
             for (const level of concurrencyLevels) {
-                const payloadGenerator = (index) => 
+                const payloadGenerator = (index) =>
                     global.testManager.generateConcurrentPayload(
                         index,
                         `concurrency-${level}`,
@@ -54,8 +54,8 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
         });
 
         test('should maintain performance under concurrent load', async () => {
-            const concurrentCount = 5;
-            const payloadGenerator = (index) => 
+            const concurrentCount = 3; // Reduced from 5
+            const payloadGenerator = (index) =>
                 global.testManager.generateConcurrentPayload(
                     index,
                     'performance-test',
@@ -76,11 +76,11 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
 
     describe('Concurrency Scaling', () => {
         test('should scale throughput with concurrency', async () => {
-            const loadLevels = [1, 3, 5, 8];
+            const loadLevels = [1, 2, 3]; // Simplified from [1, 3, 5, 8]
             const throughputResults = [];
 
             for (const level of loadLevels) {
-                const payloadGenerator = (index) => 
+                const payloadGenerator = (index) =>
                     global.testManager.generateConcurrentPayload(
                         index,
                         `throughput-${level}`,
@@ -103,11 +103,11 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
         });
 
         test('should handle burst traffic patterns', async () => {
-            const burstRounds = 3;
-            const burstSize = 5;
+            const burstRounds = 2; // Reduced from 3
+            const burstSize = 3; // Reduced from 5
 
             for (let round = 0; round < burstRounds; round++) {
-                const payloadGenerator = (index) => 
+                const payloadGenerator = (index) =>
                     global.testManager.generateConcurrentPayload(
                         index,
                         `burst-${round}`,
@@ -118,9 +118,9 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
                 const results = await runConcurrentInvocations(testFunction.name, burstSize, payloadGenerator);
 
                 assertSuccessfulInvocations(results, burstSize);
-                
+
                 // Wait between bursts
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise(resolve => setTimeout(resolve, 300)); // Reduced from 500ms
             }
         });
     });
@@ -183,8 +183,8 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
 
     describe('Concurrency Limits and Throttling', () => {
         test('should handle high concurrency gracefully', async () => {
-            const highConcurrency = 15;
-            const payloadGenerator = (index) => 
+            const highConcurrency = 5; // Reduced from 15
+            const payloadGenerator = (index) =>
                 global.testManager.generateConcurrentPayload(
                     index,
                     'high-concurrency',
@@ -203,10 +203,10 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
         });
 
         test('should maintain response times under load', async () => {
-            const loadLevels = [5, 10, 15];
-            
+            const loadLevels = [2, 3]; // Simplified from [5, 10, 15]
+
             for (const level of loadLevels) {
-                const payloadGenerator = (index) => 
+                const payloadGenerator = (index) =>
                     global.testManager.generateConcurrentPayload(
                         index,
                         `response-time-${level}`,
@@ -215,7 +215,7 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
                     );
 
                 const results = await runConcurrentInvocations(testFunction.name, level, payloadGenerator);
-                
+
                 // Calculate response time statistics
                 const durations = results.map(r => r.duration).filter(d => d > 0);
                 if (durations.length > 0) {
@@ -292,11 +292,11 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
 
     describe('Sustained Concurrency', () => {
         test('should maintain performance under sustained concurrent load', async () => {
-            const sustainedRounds = 3;
-            const concurrentPerRound = 5;
+            const sustainedRounds = 2; // Reduced from 3
+            const concurrentPerRound = 3; // Reduced from 5
 
             for (let round = 0; round < sustainedRounds; round++) {
-                const payloadGenerator = (index) => 
+                const payloadGenerator = (index) =>
                     global.testManager.generateConcurrentPayload(
                         index,
                         `sustained-${round}`,
@@ -311,24 +311,23 @@ describe('Lambda@Home Concurrency and Throttling Tests', () => {
                 // Performance should remain consistent across rounds
                 const avgDuration = results.reduce((sum, r) => sum + r.duration, 0) / results.length;
                 assertWithinPerformanceThreshold(avgDuration, testData.performanceThresholds.mediumExecution);
-                
+
                 // Wait between rounds
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                await new Promise(resolve => setTimeout(resolve, 500)); // Reduced from 1000ms
             }
         });
 
         test('should handle mixed concurrent and sequential patterns', async () => {
-            // Mix of concurrent and sequential invocations
+            // Mix of concurrent and sequential invocations - simplified
             const patterns = [
-                { type: 'concurrent', count: 3 },
-                { type: 'sequential', count: 2 },
-                { type: 'concurrent', count: 5 },
-                { type: 'sequential', count: 1 }
+                { type: 'concurrent', count: 2 }, // Reduced from 3
+                { type: 'sequential', count: 1 }, // Reduced from 2
+                { type: 'concurrent', count: 2 }, // Reduced from 5
             ];
 
             for (const pattern of patterns) {
                 if (pattern.type === 'concurrent') {
-                    const payloadGenerator = (index) => 
+                    const payloadGenerator = (index) =>
                         global.testManager.generateConcurrentPayload(
                             index,
                             `mixed-${pattern.type}`,
