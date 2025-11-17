@@ -7,6 +7,7 @@ const MIGRATION_002_API_ROUTES: &str = include_str!("../migrations/002_api_route
 const MIGRATION_003_SECRETS: &str = include_str!("../migrations/003_secrets.sql");
 const MIGRATION_004_FUNCTION_CONCURRENCY: &str =
     include_str!("../migrations/004_function_concurrency.sql");
+const MIGRATION_005_ARCHITECTURES: &str = include_str!("../migrations/005_architectures.sql");
 
 /// Run all embedded migrations
 pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
@@ -27,6 +28,12 @@ pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
     // Migration 004: Function Concurrency
     info!("Running migration 004: Function Concurrency");
     sqlx::query(MIGRATION_004_FUNCTION_CONCURRENCY)
+        .execute(pool)
+        .await?;
+
+    // Migration 005: Architectures
+    info!("Running migration 005: Architectures");
+    sqlx::query(MIGRATION_005_ARCHITECTURES)
         .execute(pool)
         .await?;
 
