@@ -435,6 +435,32 @@ pub async fn invoke_function(
         .and_then(|s| s.parse().ok())
         .unwrap_or(lambda_models::InvocationType::RequestResponse);
 
+    // Validate payload size (AWS Lambda limits)
+    const MAX_SYNC_PAYLOAD: usize = 6 * 1024 * 1024; // 6MB
+    const MAX_ASYNC_PAYLOAD: usize = 256 * 1024; // 256KB
+
+    let max_size = match invocation_type {
+        lambda_models::InvocationType::RequestResponse | lambda_models::InvocationType::DryRun => {
+            MAX_SYNC_PAYLOAD
+        }
+        lambda_models::InvocationType::Event => MAX_ASYNC_PAYLOAD,
+    };
+
+    if body.len() > max_size {
+        return Err((
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(ErrorShape {
+                error_message: format!(
+                    "Request payload too large: {} bytes (max: {} bytes)",
+                    body.len(),
+                    max_size
+                ),
+                error_type: "RequestTooLargeException".to_string(),
+                stack_trace: None,
+            }),
+        ));
+    }
+
     let log_type = headers
         .get("X-Amz-Log-Type")
         .and_then(|h| h.to_str().ok())

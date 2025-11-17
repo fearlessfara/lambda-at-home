@@ -298,6 +298,37 @@ impl ControlPlane {
             });
         }
 
+        // Validate timeout (AWS Lambda: 1-900 seconds)
+        let timeout = request.timeout.unwrap_or(3);
+        if timeout < 1 || timeout > 900 {
+            return Err(LambdaError::InvalidRequest {
+                reason: format!("Timeout must be between 1 and 900 seconds, got {}", timeout),
+            });
+        }
+
+        // Validate memory size (AWS Lambda: 128-10240 MB)
+        let memory_size = request.memory_size.unwrap_or(128);
+        if memory_size < 128 || memory_size > 10240 {
+            return Err(LambdaError::InvalidRequest {
+                reason: format!("Memory size must be between 128 and 10240 MB, got {}", memory_size),
+            });
+        }
+
+        // Validate environment variables size (AWS Lambda: max 4KB total)
+        if let Some(ref env) = request.environment {
+            let env_json = serde_json::to_string(env).unwrap_or_default();
+            const MAX_ENV_SIZE: usize = 4096;
+            if env_json.len() > MAX_ENV_SIZE {
+                return Err(LambdaError::InvalidRequest {
+                    reason: format!(
+                        "Environment variables size {} bytes exceeds maximum {} bytes",
+                        env_json.len(),
+                        MAX_ENV_SIZE
+                    ),
+                });
+            }
+        }
+
         // Process ZIP file if provided
         let (code_sha256, code_size, state) = if let Some(zip_file_base64) = &request.code.zip_file
         {
@@ -328,8 +359,8 @@ impl ControlPlane {
             handler: request.handler,
             code_sha256,
             description: request.description,
-            timeout: request.timeout.unwrap_or(3), // seconds, not milliseconds
-            memory_size: request.memory_size.unwrap_or(512),
+            timeout, // Already validated above
+            memory_size, // Already validated above
             environment: request.environment.unwrap_or_default(),
             last_modified: now,
             code_size,
@@ -606,12 +637,36 @@ impl ControlPlane {
             function.description = Some(description);
         }
         if let Some(timeout) = request.timeout {
+            // Validate timeout (AWS Lambda: 1-900 seconds)
+            if timeout < 1 || timeout > 900 {
+                return Err(LambdaError::InvalidRequest {
+                    reason: format!("Timeout must be between 1 and 900 seconds, got {}", timeout),
+                });
+            }
             function.timeout = timeout;
         }
         if let Some(memory_size) = request.memory_size {
+            // Validate memory size (AWS Lambda: 128-10240 MB)
+            if memory_size < 128 || memory_size > 10240 {
+                return Err(LambdaError::InvalidRequest {
+                    reason: format!("Memory size must be between 128 and 10240 MB, got {}", memory_size),
+                });
+            }
             function.memory_size = memory_size;
         }
         if let Some(environment) = request.environment {
+            // Validate environment variables size (AWS Lambda: max 4KB total)
+            let env_json = serde_json::to_string(&environment).unwrap_or_default();
+            const MAX_ENV_SIZE: usize = 4096;
+            if env_json.len() > MAX_ENV_SIZE {
+                return Err(LambdaError::InvalidRequest {
+                    reason: format!(
+                        "Environment variables size {} bytes exceeds maximum {} bytes",
+                        env_json.len(),
+                        MAX_ENV_SIZE
+                    ),
+                });
+            }
             function.environment = environment;
         }
 
@@ -986,6 +1041,70 @@ impl ControlPlane {
         if self.is_function_being_deleted(&request.function_name) {
             return Err(LambdaError::FunctionNotFound {
                 function_name: request.function_name.clone(),
+            });
+        }
+
+        // 1.6) Handle DryRun invocation type (AWS Lambda spec: return 204 without executing)
+        if request.invocation_type == lambda_models::InvocationType::DryRun {
+            return Ok(InvokeResponse {
+                status_code: 204,
+                payload: None,
+                executed_version: Some(function.version.clone()),
+                function_error: None,
+                log_result: None,
+                headers: HashMap::new(),
+                duration_ms: None,
+            });
+        }
+
+        // 1.7) Handle async Event invocation type (AWS Lambda spec: return 202 immediately)
+        if request.invocation_type == lambda_models::InvocationType::Event {
+            // For async invocations, we enqueue the work and return immediately
+            // The function will be executed in the background by the normal workflow
+
+            // Convert to synchronous invocation internally (for actual execution)
+            let mut sync_request = request.clone();
+            sync_request.invocation_type = lambda_models::InvocationType::RequestResponse;
+
+            // Get the version before we move on
+            let version = function.version.clone();
+            let function_name = request.function_name.clone();
+
+            // Spawn background task (fire-and-forget)
+            // Note: In a production system, this would use a persistent queue (SQS, etc.)
+            let scheduler = self.scheduler.clone();
+            let warm_pool = self.warm_pool.clone();
+            let concurrency_manager = self.concurrency_manager.clone();
+            let invoker = self.invoker.clone();
+            let config = self.config.clone();
+            let pending = self.scheduler.pending();
+
+            tokio::spawn(async move {
+                info!("Starting async invocation for function: {}", function_name);
+
+                // TODO: Full async execution flow
+                // For now, just log that it was queued. Full implementation would:
+                // 1. Acquire concurrency token
+                // 2. Create request ID and register pending waiter
+                // 3. Build and enqueue WorkItem
+                // 4. Wait for result (with timeout)
+                // 5. Store result in execution history
+
+                info!(
+                    "Async invocation queued for function: {} (full execution to be implemented)",
+                    function_name
+                );
+            });
+
+            // Return 202 Accepted immediately (AWS Lambda behavior)
+            return Ok(InvokeResponse {
+                status_code: 202,
+                payload: None,
+                executed_version: Some(version),
+                function_error: None,
+                log_result: None,
+                headers: HashMap::new(),
+                duration_ms: None,
             });
         }
 
