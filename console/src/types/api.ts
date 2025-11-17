@@ -17,6 +17,7 @@ export interface Function {
   state: FunctionState;
   state_reason?: string;
   state_reason_code?: string;
+  architectures?: string[]; // "x86_64" or "arm64", only one allowed
 }
 
 export type FunctionState = 'Pending' | 'Active' | 'Inactive' | 'Failed';
@@ -32,6 +33,7 @@ export interface CreateFunctionRequest {
   memory_size?: number;
   environment?: Record<string, string>;
   publish?: boolean;
+  architectures?: string[]; // "x86_64" or "arm64", only one allowed
 }
 
 export interface FunctionCode {

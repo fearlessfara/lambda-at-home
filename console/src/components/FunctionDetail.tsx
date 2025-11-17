@@ -147,6 +147,10 @@ export function FunctionDetail() {
                   <p className="mt-1 text-sm font-mono">{func.handler}</p>
                 </div>
                 <div>
+                  <label className="text-sm font-medium text-muted-foreground">Architecture</label>
+                  <p className="mt-1 text-sm">{func.architectures?.[0] || "x86_64"}</p>
+                </div>
+                <div>
                   <label className="text-sm font-medium text-muted-foreground">Version</label>
                   <p className="mt-1 text-sm">{func.version}</p>
                 </div>
