@@ -18,6 +18,10 @@ pub fn create_router() -> Router<AppState> {
         )
         .route(
             "/2015-03-31/functions/:name/configuration",
+            get(get_function_configuration),
+        )
+        .route(
+            "/2015-03-31/functions/:name/configuration",
             put(update_function_configuration),
         )
         // Versions
@@ -54,8 +58,8 @@ pub fn create_router() -> Router<AppState> {
         // Invocation
         .route(
             "/2015-03-31/functions/:name/invocations",
-            post(|state, path, headers, body| async move {
-                invoke_function(state, path, headers, body).await
+            post(|state, path, query, headers, body| async move {
+                invoke_function(state, path, query, headers, body).await
             }),
         )
         // Health and metrics

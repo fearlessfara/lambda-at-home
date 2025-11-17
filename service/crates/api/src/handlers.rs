@@ -26,7 +26,7 @@ type InvokeResponse =
 pub async fn create_function(
     State(state): State<AppState>,
     Json(payload): Json<CreateFunctionRequest>,
-) -> Result<Json<lambda_models::Function>, (StatusCode, Json<ErrorShape>)> {
+) -> Result<(StatusCode, Json<lambda_models::Function>), (StatusCode, Json<ErrorShape>)> {
     info!("Creating function: {}", payload.function_name);
 
     match state.control.create_function(payload).await {
@@ -35,7 +35,7 @@ pub async fn create_function(
                 .metrics
                 .record_function_created(&function.function_name)
                 .await;
-            Ok(Json(function))
+            Ok((StatusCode::CREATED, Json(function))) // 201 Created (AWS Lambda spec)
         }
         Err(e) => {
             error!("Failed to create function: {}", e);
@@ -124,6 +124,26 @@ pub async fn update_function_code(
         Ok(function) => Ok(Json(function)),
         Err(e) => {
             error!("Failed to update function code for {}: {}", name, e);
+            let error_shape = e.to_error_shape();
+            Err((
+                StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+                Json(error_shape),
+            ))
+        }
+    }
+}
+
+#[instrument(skip(state))]
+pub async fn get_function_configuration(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+) -> Result<Json<lambda_models::Function>, (StatusCode, Json<ErrorShape>)> {
+    info!("Getting function configuration: {}", name);
+
+    match state.control.get_function(&name).await {
+        Ok(function) => Ok(Json(function)),
+        Err(e) => {
+            error!("Failed to get function configuration {}: {}", name, e);
             let error_shape = e.to_error_shape();
             Err((
                 StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
@@ -425,9 +445,16 @@ pub async fn delete_concurrency(
 pub async fn invoke_function(
     State(state): State<AppState>,
     Path(name): Path<String>,
+    Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
     body: Bytes,
 ) -> InvokeResponse {
+    // Parse qualifier from query parameters (AWS Lambda spec: ?Qualifier=version or alias)
+    let qualifier = params.get("Qualifier").cloned();
+    if let Some(ref q) = qualifier {
+        info!("Invoking function {} with qualifier: {}", name, q);
+    }
+
     // Parse invocation type from headers
     let invocation_type = headers
         .get("X-Amz-Invocation-Type")
@@ -487,7 +514,7 @@ pub async fn invoke_function(
         log_type,
         client_context: None,
         payload,
-        qualifier: None,
+        qualifier, // AWS Lambda spec: version or alias name
     };
 
     match state.control.invoke_function(request).await {

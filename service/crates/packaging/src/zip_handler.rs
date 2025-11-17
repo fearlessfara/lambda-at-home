@@ -15,11 +15,15 @@ impl ZipHandler {
 
     #[instrument(skip(self, zip_data))]
     pub async fn process_zip(&self, zip_data: &[u8]) -> Result<ZipInfo, LambdaError> {
-        // Validate ZIP size
-        if zip_data.len() as u64 > self.max_zip_size {
+        // AWS Lambda limits: 50MB zipped, 250MB unzipped
+        const MAX_ZIP_SIZE: u64 = 50 * 1024 * 1024; // 50MB
+        const MAX_UNZIPPED_SIZE: u64 = 250 * 1024 * 1024; // 250MB
+
+        // Validate zipped size
+        if zip_data.len() as u64 > MAX_ZIP_SIZE {
             return Err(LambdaError::CodeTooLarge {
                 size: zip_data.len() as u64,
-                max_size: self.max_zip_size,
+                max_size: MAX_ZIP_SIZE,
             });
         }
 
@@ -53,6 +57,16 @@ impl ZipHandler {
                 name: file_name,
                 size: file_size,
                 is_executable: file.unix_mode().is_some_and(|mode| mode & 0o111 != 0),
+            });
+        }
+
+        // Validate unzipped size (AWS Lambda limit: 250MB)
+        if total_size > MAX_UNZIPPED_SIZE {
+            return Err(LambdaError::InvalidRequest {
+                reason: format!(
+                    "Unzipped code size {} bytes exceeds maximum {} bytes (250MB)",
+                    total_size, MAX_UNZIPPED_SIZE
+                ),
             });
         }
 

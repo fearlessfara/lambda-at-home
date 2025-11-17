@@ -298,6 +298,22 @@ impl ControlPlane {
             });
         }
 
+        // Validate handler length (AWS Lambda: 0-128 characters)
+        if request.handler.len() > 128 {
+            return Err(LambdaError::InvalidHandler {
+                handler: request.handler,
+            });
+        }
+
+        // Validate description length (AWS Lambda: 0-256 characters)
+        if let Some(ref desc) = request.description {
+            if desc.len() > 256 {
+                return Err(LambdaError::InvalidRequest {
+                    reason: format!("Description exceeds 256 characters: {} chars", desc.len()),
+                });
+            }
+        }
+
         // Validate timeout (AWS Lambda: 1-900 seconds)
         let timeout = request.timeout.unwrap_or(3);
         if timeout < 1 || timeout > 900 {
@@ -631,9 +647,19 @@ impl ControlPlane {
             function.role = Some(role);
         }
         if let Some(handler) = request.handler {
+            // Validate handler length (AWS Lambda: 0-128 characters)
+            if handler.len() > 128 {
+                return Err(LambdaError::InvalidHandler { handler });
+            }
             function.handler = handler;
         }
         if let Some(description) = request.description {
+            // Validate description length (AWS Lambda: 0-256 characters)
+            if description.len() > 256 {
+                return Err(LambdaError::InvalidRequest {
+                    reason: format!("Description exceeds 256 characters: {} chars", description.len()),
+                });
+            }
             function.description = Some(description);
         }
         if let Some(timeout) = request.timeout {
