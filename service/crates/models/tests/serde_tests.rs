@@ -19,6 +19,7 @@ fn test_function_serde_roundtrip() {
         state: FunctionState::Active,
         state_reason: None,
         state_reason_code: None,
+        architectures: vec![Architecture::X86_64],
     };
 
     let json = serde_json::to_string(&function).unwrap();

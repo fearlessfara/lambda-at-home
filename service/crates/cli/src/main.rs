@@ -154,6 +154,7 @@ async fn create_function(
         memory_size: Some(params.memory),
         environment: None,
         publish: Some(false),
+        architectures: None, // Default to x86_64
     };
 
     let response = client

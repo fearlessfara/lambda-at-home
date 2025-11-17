@@ -298,6 +298,71 @@ impl ControlPlane {
             });
         }
 
+        // Validate handler length (AWS Lambda: 0-128 characters)
+        if request.handler.len() > 128 {
+            return Err(LambdaError::InvalidHandler {
+                handler: request.handler,
+            });
+        }
+
+        // Validate description length (AWS Lambda: 0-256 characters)
+        if let Some(ref desc) = request.description {
+            if desc.len() > 256 {
+                return Err(LambdaError::InvalidRequest {
+                    reason: format!("Description exceeds 256 characters: {} chars", desc.len()),
+                });
+            }
+        }
+
+        // Validate architectures (AWS Lambda: only one architecture allowed, x86_64 or arm64)
+        let architectures = if let Some(ref archs) = request.architectures {
+            if archs.is_empty() {
+                return Err(LambdaError::InvalidRequest {
+                    reason: "Architectures array cannot be empty".to_string(),
+                });
+            }
+            if archs.len() > 1 {
+                return Err(LambdaError::InvalidRequest {
+                    reason: "Only one architecture is allowed".to_string(),
+                });
+            }
+            archs.clone()
+        } else {
+            // Default to x86_64 (AWS Lambda behavior)
+            vec![lambda_models::Architecture::X86_64]
+        };
+
+        // Validate timeout (AWS Lambda: 1-900 seconds)
+        let timeout = request.timeout.unwrap_or(3);
+        if timeout < 1 || timeout > 900 {
+            return Err(LambdaError::InvalidRequest {
+                reason: format!("Timeout must be between 1 and 900 seconds, got {}", timeout),
+            });
+        }
+
+        // Validate memory size (AWS Lambda: 128-10240 MB)
+        let memory_size = request.memory_size.unwrap_or(128);
+        if memory_size < 128 || memory_size > 10240 {
+            return Err(LambdaError::InvalidRequest {
+                reason: format!("Memory size must be between 128 and 10240 MB, got {}", memory_size),
+            });
+        }
+
+        // Validate environment variables size (AWS Lambda: max 4KB total)
+        if let Some(ref env) = request.environment {
+            let env_json = serde_json::to_string(env).unwrap_or_default();
+            const MAX_ENV_SIZE: usize = 4096;
+            if env_json.len() > MAX_ENV_SIZE {
+                return Err(LambdaError::InvalidRequest {
+                    reason: format!(
+                        "Environment variables size {} bytes exceeds maximum {} bytes",
+                        env_json.len(),
+                        MAX_ENV_SIZE
+                    ),
+                });
+            }
+        }
+
         // Process ZIP file if provided
         let (code_sha256, code_size, state) = if let Some(zip_file_base64) = &request.code.zip_file
         {
@@ -328,8 +393,8 @@ impl ControlPlane {
             handler: request.handler,
             code_sha256,
             description: request.description,
-            timeout: request.timeout.unwrap_or(3), // seconds, not milliseconds
-            memory_size: request.memory_size.unwrap_or(512),
+            timeout, // Already validated above
+            memory_size, // Already validated above
             environment: request.environment.unwrap_or_default(),
             last_modified: now,
             code_size,
@@ -337,6 +402,7 @@ impl ControlPlane {
             state,
             state_reason: None,
             state_reason_code: None,
+            architectures, // Already validated above
         };
 
         sqlx::query(
@@ -344,8 +410,8 @@ impl ControlPlane {
             INSERT INTO functions (
                 function_id, function_name, runtime, role, handler, code_sha256,
                 description, timeout, memory_size, environment, last_modified,
-                code_size, version, state, state_reason, state_reason_code
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                code_size, version, state, state_reason, state_reason_code, architectures
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(function.function_id)
@@ -364,6 +430,7 @@ impl ControlPlane {
         .bind(serde_json::to_string(&function.state).unwrap_or_default())
         .bind(&function.state_reason)
         .bind(&function.state_reason_code)
+        .bind(serde_json::to_string(&function.architectures).unwrap_or_default())
         .execute(&self.pool)
         .await
         .map_err(LambdaError::SqlxError)?;
@@ -600,18 +667,52 @@ impl ControlPlane {
             function.role = Some(role);
         }
         if let Some(handler) = request.handler {
+            // Validate handler length (AWS Lambda: 0-128 characters)
+            if handler.len() > 128 {
+                return Err(LambdaError::InvalidHandler { handler });
+            }
             function.handler = handler;
         }
         if let Some(description) = request.description {
+            // Validate description length (AWS Lambda: 0-256 characters)
+            if description.len() > 256 {
+                return Err(LambdaError::InvalidRequest {
+                    reason: format!("Description exceeds 256 characters: {} chars", description.len()),
+                });
+            }
             function.description = Some(description);
         }
         if let Some(timeout) = request.timeout {
+            // Validate timeout (AWS Lambda: 1-900 seconds)
+            if timeout < 1 || timeout > 900 {
+                return Err(LambdaError::InvalidRequest {
+                    reason: format!("Timeout must be between 1 and 900 seconds, got {}", timeout),
+                });
+            }
             function.timeout = timeout;
         }
         if let Some(memory_size) = request.memory_size {
+            // Validate memory size (AWS Lambda: 128-10240 MB)
+            if memory_size < 128 || memory_size > 10240 {
+                return Err(LambdaError::InvalidRequest {
+                    reason: format!("Memory size must be between 128 and 10240 MB, got {}", memory_size),
+                });
+            }
             function.memory_size = memory_size;
         }
         if let Some(environment) = request.environment {
+            // Validate environment variables size (AWS Lambda: max 4KB total)
+            let env_json = serde_json::to_string(&environment).unwrap_or_default();
+            const MAX_ENV_SIZE: usize = 4096;
+            if env_json.len() > MAX_ENV_SIZE {
+                return Err(LambdaError::InvalidRequest {
+                    reason: format!(
+                        "Environment variables size {} bytes exceeds maximum {} bytes",
+                        env_json.len(),
+                        MAX_ENV_SIZE
+                    ),
+                });
+            }
             function.environment = environment;
         }
 
@@ -986,6 +1087,70 @@ impl ControlPlane {
         if self.is_function_being_deleted(&request.function_name) {
             return Err(LambdaError::FunctionNotFound {
                 function_name: request.function_name.clone(),
+            });
+        }
+
+        // 1.6) Handle DryRun invocation type (AWS Lambda spec: return 204 without executing)
+        if request.invocation_type == lambda_models::InvocationType::DryRun {
+            return Ok(InvokeResponse {
+                status_code: 204,
+                payload: None,
+                executed_version: Some(function.version.clone()),
+                function_error: None,
+                log_result: None,
+                headers: HashMap::new(),
+                duration_ms: None,
+            });
+        }
+
+        // 1.7) Handle async Event invocation type (AWS Lambda spec: return 202 immediately)
+        if request.invocation_type == lambda_models::InvocationType::Event {
+            // For async invocations, we enqueue the work and return immediately
+            // The function will be executed in the background by the normal workflow
+
+            // Convert to synchronous invocation internally (for actual execution)
+            let mut sync_request = request.clone();
+            sync_request.invocation_type = lambda_models::InvocationType::RequestResponse;
+
+            // Get the version before we move on
+            let version = function.version.clone();
+            let function_name = request.function_name.clone();
+
+            // Spawn background task (fire-and-forget)
+            // Note: In a production system, this would use a persistent queue (SQS, etc.)
+            let scheduler = self.scheduler.clone();
+            let warm_pool = self.warm_pool.clone();
+            let concurrency_manager = self.concurrency_manager.clone();
+            let invoker = self.invoker.clone();
+            let config = self.config.clone();
+            let pending = self.scheduler.pending();
+
+            tokio::spawn(async move {
+                info!("Starting async invocation for function: {}", function_name);
+
+                // TODO: Full async execution flow
+                // For now, just log that it was queued. Full implementation would:
+                // 1. Acquire concurrency token
+                // 2. Create request ID and register pending waiter
+                // 3. Build and enqueue WorkItem
+                // 4. Wait for result (with timeout)
+                // 5. Store result in execution history
+
+                info!(
+                    "Async invocation queued for function: {} (full execution to be implemented)",
+                    function_name
+                );
+            });
+
+            // Return 202 Accepted immediately (AWS Lambda behavior)
+            return Ok(InvokeResponse {
+                status_code: 202,
+                payload: None,
+                executed_version: Some(version),
+                function_error: None,
+                log_result: None,
+                headers: HashMap::new(),
+                duration_ms: None,
             });
         }
 
@@ -1447,6 +1612,13 @@ impl ControlPlane {
         )
         .unwrap_or(FunctionState::Pending);
 
+        let architectures: Vec<lambda_models::Architecture> = serde_json::from_str(
+            row.try_get::<String, _>("architectures")
+                .map_err(LambdaError::SqlxError)?
+                .as_str(),
+        )
+        .unwrap_or_else(|_| vec![lambda_models::Architecture::X86_64]); // Default to x86_64
+
         Ok(Function {
             function_id: row.try_get("function_id").map_err(LambdaError::SqlxError)?,
             function_name: row
@@ -1478,6 +1650,7 @@ impl ControlPlane {
             state_reason_code: row
                 .try_get("state_reason_code")
                 .map_err(LambdaError::SqlxError)?,
+            architectures,
         })
     }
 

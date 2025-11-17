@@ -68,6 +68,9 @@ logs/
 # Cache
 .cache/
 .parcel-cache/
+__pycache__/
+*.pyc
+*.pyo
 
 # Coverage reports
 htmlcov/

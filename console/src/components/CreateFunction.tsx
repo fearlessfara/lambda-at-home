@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, ArrowLeft, Loader2 } from 'lucide-react';
+import { Upload, ArrowLeft, Loader2, Info } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
@@ -22,22 +22,77 @@ export function CreateFunction() {
     handler: '',
     description: '',
     timeout: 3,
-    memorySize: 512,
+    memorySize: 128,
+    architecture: 'x86_64' as 'x86_64' | 'arm64',
   });
   const [envRows, setEnvRows] = useState<{ key: string; value: string; isSecret?: boolean; secretName?: string }[]>([]);
   const [secrets, setSecrets] = useState<string[]>([]);
   useEffect(()=>{ (async()=>{ try{ const res = await api.listSecrets(); setSecrets(res.secrets.map(s=>s.name)); }catch{} })(); },[]);
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+
+  const validateForm = () => {
+    const errors: Record<string, string> = {};
+    
+    // Function name: 1-64 chars, [a-zA-Z0-9-_]+
+    if (!formData.functionName) {
+      errors.functionName = 'Function name is required';
+    } else if (formData.functionName.length > 64) {
+      errors.functionName = 'Function name must be 64 characters or less';
+    } else if (!/^[a-zA-Z0-9-_]+$/.test(formData.functionName)) {
+      errors.functionName = 'Function name can only contain letters, numbers, hyphens, and underscores';
+    }
+    
+    // Handler: 0-128 chars
+    if (formData.handler.length > 128) {
+      errors.handler = 'Handler must be 128 characters or less';
+    }
+    
+    // Description: 0-256 chars
+    if (formData.description.length > 256) {
+      errors.description = 'Description must be 256 characters or less';
+    }
+    
+    // Timeout: 1-900 seconds
+    if (formData.timeout < 1 || formData.timeout > 900) {
+      errors.timeout = 'Timeout must be between 1 and 900 seconds';
+    }
+    
+    // Memory: 128-10240 MB
+    if (formData.memorySize < 128 || formData.memorySize > 10240) {
+      errors.memorySize = 'Memory size must be between 128 and 10240 MB';
+    }
+    
+    // ZIP file: max 50MB
+    if (zipFile && zipFile.size > 50 * 1024 * 1024) {
+      errors.zipFile = 'ZIP file must be 50 MB or less';
+    }
+    
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const handleInputChange = (field: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    // Clear validation error for this field
+    setValidationErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors[field];
+      return newErrors;
+    });
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       setZipFile(file);
+      // Clear validation error
+      setValidationErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors.zipFile;
+        return newErrors;
+      });
     }
   };
 
@@ -76,6 +131,16 @@ export function CreateFunction() {
       return;
     }
 
+    // Validate all fields
+    if (!validateForm()) {
+      toast({
+        title: "Validation Error",
+        description: "Please fix the validation errors before submitting.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsUploading(true);
 
     try {
@@ -97,6 +162,7 @@ export function CreateFunction() {
         timeout: formData.timeout,
         memory_size: formData.memorySize,
         environment: Object.keys(env).length ? env : undefined,
+        architectures: [formData.architecture], // AWS Lambda spec: array with one element
         publish: true,
       };
 
@@ -190,7 +256,12 @@ export function CreateFunction() {
                   onChange={(e) => handleInputChange('functionName', e.target.value)}
                   placeholder="my-function"
                   required
+                  className={validationErrors.functionName ? 'border-red-500' : ''}
                 />
+                {validationErrors.functionName && (
+                  <p className="text-sm text-red-600">{validationErrors.functionName}</p>
+                )}
+                <p className="text-xs text-muted-foreground">1-64 chars, letters, numbers, hyphens, underscores</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="runtime">Runtime *</Label>
@@ -223,7 +294,11 @@ export function CreateFunction() {
                 onChange={(e) => handleInputChange('handler', e.target.value)}
                 placeholder="index.handler"
                 required
+                className={validationErrors.handler ? 'border-red-500' : ''}
               />
+              {validationErrors.handler && (
+                <p className="text-sm text-red-600">{validationErrors.handler}</p>
+              )}
               <p className="text-sm text-muted-foreground">
                 The function entry point (e.g., index.handler for Node.js, lambda_function.lambda_handler for Python)
               </p>
@@ -236,32 +311,68 @@ export function CreateFunction() {
                 value={formData.description}
                 onChange={(e) => handleInputChange('description', e.target.value)}
                 placeholder="Optional description"
+                className={validationErrors.description ? 'border-red-500' : ''}
               />
+              {validationErrors.description && (
+                <p className="text-sm text-red-600">{validationErrors.description}</p>
+              )}
+              <p className="text-xs text-muted-foreground">Max 256 characters</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="timeout">Timeout (s)</Label>
+                <Label htmlFor="timeout">Timeout (seconds) *</Label>
                 <Input
                   id="timeout"
                   type="number"
                   value={formData.timeout}
                   onChange={(e) => handleInputChange('timeout', parseInt(e.target.value) || 3)}
                   min="1"
-                  max="300"
+                  max="900"
+                  className={validationErrors.timeout ? 'border-red-500' : ''}
                 />
+                {validationErrors.timeout && (
+                  <p className="text-sm text-red-600">{validationErrors.timeout}</p>
+                )}
+                <p className="text-xs text-muted-foreground">1-900 seconds</p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="memorySize">Memory Size (MB)</Label>
+                <Label htmlFor="memorySize">Memory (MB) *</Label>
                 <Input
                   id="memorySize"
                   type="number"
                   value={formData.memorySize}
-                  onChange={(e) => handleInputChange('memorySize', parseInt(e.target.value) || 512)}
+                  onChange={(e) => handleInputChange('memorySize', parseInt(e.target.value) || 128)}
                   min="128"
                   max="10240"
+                  step="1"
+                  className={validationErrors.memorySize ? 'border-red-500' : ''}
                 />
+                {validationErrors.memorySize && (
+                  <p className="text-sm text-red-600">{validationErrors.memorySize}</p>
+                )}
+                <p className="text-xs text-muted-foreground">128-10240 MB</p>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="architecture">Architecture *</Label>
+              <Select
+                value={formData.architecture}
+                onValueChange={(value) => handleInputChange('architecture', value as 'x86_64' | 'arm64')}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="x86_64">x86_64 (Intel/AMD)</SelectItem>
+                  <SelectItem value="arm64">arm64 (ARM/Graviton)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Info className="h-3 w-3" />
+                Container architecture - must match your build target
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -311,6 +422,7 @@ export function CreateFunction() {
                   Add variable
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground">Total size limit: 4KB</p>
             </div>
 
             <div className="space-y-2">
@@ -321,13 +433,16 @@ export function CreateFunction() {
                   type="file"
                   accept=".zip"
                   onChange={handleFileChange}
-                  className="flex-1"
+                  className={`flex-1 ${validationErrors.zipFile ? 'border-red-500' : ''}`}
                   required
                 />
                 <Upload className="h-4 w-4 text-muted-foreground" />
               </div>
+              {validationErrors.zipFile && (
+                <p className="text-sm text-red-600">{validationErrors.zipFile}</p>
+              )}
               <p className="text-sm text-muted-foreground">
-                Upload a ZIP file containing your function code
+                Upload a ZIP file containing your function code (max 50 MB)
               </p>
               {zipFile && (
                 <p className="text-sm text-green-600">
