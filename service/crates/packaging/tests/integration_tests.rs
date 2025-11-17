@@ -43,6 +43,7 @@ fn test_image_tag_computation() {
         state: lambda_models::FunctionState::Active,
         state_reason: None,
         state_reason_code: None,
+        architectures: vec![lambda_models::Architecture::X86_64],
     };
 
     // Test image tag generation logic without actually building

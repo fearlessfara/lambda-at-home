@@ -314,6 +314,24 @@ impl ControlPlane {
             }
         }
 
+        // Validate architectures (AWS Lambda: only one architecture allowed, x86_64 or arm64)
+        let architectures = if let Some(ref archs) = request.architectures {
+            if archs.is_empty() {
+                return Err(LambdaError::InvalidRequest {
+                    reason: "Architectures array cannot be empty".to_string(),
+                });
+            }
+            if archs.len() > 1 {
+                return Err(LambdaError::InvalidRequest {
+                    reason: "Only one architecture is allowed".to_string(),
+                });
+            }
+            archs.clone()
+        } else {
+            // Default to x86_64 (AWS Lambda behavior)
+            vec![lambda_models::Architecture::X86_64]
+        };
+
         // Validate timeout (AWS Lambda: 1-900 seconds)
         let timeout = request.timeout.unwrap_or(3);
         if timeout < 1 || timeout > 900 {
@@ -384,6 +402,7 @@ impl ControlPlane {
             state,
             state_reason: None,
             state_reason_code: None,
+            architectures, // Already validated above
         };
 
         sqlx::query(
@@ -391,8 +410,8 @@ impl ControlPlane {
             INSERT INTO functions (
                 function_id, function_name, runtime, role, handler, code_sha256,
                 description, timeout, memory_size, environment, last_modified,
-                code_size, version, state, state_reason, state_reason_code
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                code_size, version, state, state_reason, state_reason_code, architectures
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(function.function_id)
@@ -411,6 +430,7 @@ impl ControlPlane {
         .bind(serde_json::to_string(&function.state).unwrap_or_default())
         .bind(&function.state_reason)
         .bind(&function.state_reason_code)
+        .bind(serde_json::to_string(&function.architectures).unwrap_or_default())
         .execute(&self.pool)
         .await
         .map_err(LambdaError::SqlxError)?;
@@ -1592,6 +1612,13 @@ impl ControlPlane {
         )
         .unwrap_or(FunctionState::Pending);
 
+        let architectures: Vec<lambda_models::Architecture> = serde_json::from_str(
+            row.try_get::<String, _>("architectures")
+                .map_err(LambdaError::SqlxError)?
+                .as_str(),
+        )
+        .unwrap_or_else(|_| vec![lambda_models::Architecture::X86_64]); // Default to x86_64
+
         Ok(Function {
             function_id: row.try_get("function_id").map_err(LambdaError::SqlxError)?,
             function_name: row
@@ -1623,6 +1650,7 @@ impl ControlPlane {
             state_reason_code: row
                 .try_get("state_reason_code")
                 .map_err(LambdaError::SqlxError)?,
+            architectures,
         })
     }
 

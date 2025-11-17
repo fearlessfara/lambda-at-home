@@ -22,6 +22,15 @@ pub struct Function {
     pub state: FunctionState,
     pub state_reason: Option<String>,
     pub state_reason_code: Option<String>,
+    pub architectures: Vec<Architecture>, // AWS Lambda: only one architecture allowed
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum Architecture {
+    #[serde(rename = "x86_64")]
+    X86_64,
+    #[serde(rename = "arm64")]
+    Arm64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -85,6 +94,7 @@ pub struct CreateFunctionRequest {
     pub memory_size: Option<u64>,
     pub environment: Option<HashMap<String, String>>,
     pub publish: Option<bool>,
+    pub architectures: Option<Vec<Architecture>>, // AWS Lambda: only one allowed, default x86_64
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

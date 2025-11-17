@@ -36,6 +36,7 @@ async fn resolve_env_vars_resolves_secrets() {
         state: lambda_models::FunctionState::Active,
         state_reason: None,
         state_reason_code: None,
+        architectures: vec![lambda_models::Architecture::X86_64],
     };
 
     let resolved = cp.resolve_env_vars(&f).await.unwrap();

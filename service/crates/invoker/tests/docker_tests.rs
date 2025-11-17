@@ -18,6 +18,7 @@ fn create_test_function() -> Function {
         state: FunctionState::Active,
         state_reason: None,
         state_reason_code: None,
+        architectures: vec![lambda_models::Architecture::X86_64],
     }
 }
 
